@@ -136,6 +136,33 @@ def test_arg_parser_recognizes_check_credentials():
     assert args.check_credentials is False
 
 
+def test_arg_parser_transport_defaults_and_overrides(monkeypatch):
+    from digikey_mcp.server import _build_arg_parser
+
+    monkeypatch.delenv("DIGIKEY_MCP_TRANSPORT", raising=False)
+    args = _build_arg_parser().parse_args([])
+    assert args.transport == "stdio"
+    assert args.host == "127.0.0.1"
+    assert args.port == 8000
+
+    args = _build_arg_parser().parse_args(
+        ["--transport", "http", "--host", "0.0.0.0", "--port", "9999"]
+    )
+    assert args.transport == "http"
+    assert args.host == "0.0.0.0"
+    assert args.port == 9999
+
+
+def test_arg_parser_transport_env_override(monkeypatch):
+    monkeypatch.setenv("DIGIKEY_MCP_TRANSPORT", "http")
+    monkeypatch.setenv("DIGIKEY_MCP_PORT", "5555")
+    from digikey_mcp.server import _build_arg_parser
+
+    args = _build_arg_parser().parse_args([])
+    assert args.transport == "http"
+    assert args.port == 5555
+
+
 def test_recommended_products_has_different_enum():
     from digikey_mcp.server import KEYWORD_SEARCH_OPTIONS, RECOMMENDED_PRODUCTS_OPTIONS
 
