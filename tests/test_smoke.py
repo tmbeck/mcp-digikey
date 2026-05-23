@@ -163,6 +163,95 @@ def test_arg_parser_transport_env_override(monkeypatch):
     assert args.port == 5555
 
 
+class _FakeResp:
+    def __init__(self, status: int, body: dict):
+        self.status_code = status
+        self._body = body
+        self.text = str(body)
+
+    def json(self):
+        return self._body
+
+
+def test_client_prefers_stored_user_token_over_client_credentials(monkeypatch, tmp_path):
+    """When tokens.json exists, refresh_token grant is tried first."""
+    monkeypatch.setenv("DIGIKEY_MCP_TOKENS_PATH", str(tmp_path / "tokens.json"))
+    import time as _time
+
+    from digikey_mcp import auth_store
+    from digikey_mcp.server import DigiKeyClient
+
+    auth_store.save(auth_store.StoredTokens(
+        refresh_token="rt-abc",
+        access_token="at-stale",
+        expires_at=_time.time() - 1,  # expired
+        obtained_at=_time.time() - 3600,
+    ))
+
+    client = DigiKeyClient("cid", "secret", use_sandbox=False)
+    calls = []
+
+    def fake_post(url, data, **kwargs):
+        calls.append(data["grant_type"])
+        assert data["grant_type"] == "refresh_token"
+        assert data["refresh_token"] == "rt-abc"
+        return _FakeResp(
+            200,
+            {"access_token": "at-new", "refresh_token": "rt-new", "expires_in": 600},
+        )
+
+    monkeypatch.setattr(client._session, "post", fake_post)
+    assert client._token_value() == "at-new"
+    assert calls == ["refresh_token"]
+
+    # Rotated refresh_token persisted back to disk.
+    reloaded = auth_store.load()
+    assert reloaded.refresh_token == "rt-new"
+    assert reloaded.access_token == "at-new"
+
+
+def test_client_falls_back_to_client_credentials_when_refresh_fails(monkeypatch, tmp_path):
+    monkeypatch.setenv("DIGIKEY_MCP_TOKENS_PATH", str(tmp_path / "tokens.json"))
+    from digikey_mcp import auth_store
+    from digikey_mcp.server import DigiKeyClient
+
+    auth_store.save(auth_store.StoredTokens(
+        refresh_token="rt-revoked",
+        access_token="at-stale",
+        expires_at=0,
+        obtained_at=0,
+    ))
+
+    client = DigiKeyClient("cid", "secret")
+    calls = []
+
+    def fake_post(url, data, **kwargs):
+        calls.append(data["grant_type"])
+        if data["grant_type"] == "refresh_token":
+            return _FakeResp(400, {"error": "invalid_grant"})
+        return _FakeResp(200, {"access_token": "at-cc", "expires_in": 600})
+
+    monkeypatch.setattr(client._session, "post", fake_post)
+    assert client._token_value() == "at-cc"
+    assert calls == ["refresh_token", "client_credentials"]
+
+
+def test_client_uses_client_credentials_when_no_stored_tokens(monkeypatch, tmp_path):
+    monkeypatch.setenv("DIGIKEY_MCP_TOKENS_PATH", str(tmp_path / "tokens.json"))
+    from digikey_mcp.server import DigiKeyClient
+
+    client = DigiKeyClient("cid", "secret")
+    calls = []
+
+    def fake_post(url, data, **kwargs):
+        calls.append(data["grant_type"])
+        return _FakeResp(200, {"access_token": "at-cc", "expires_in": 600})
+
+    monkeypatch.setattr(client._session, "post", fake_post)
+    assert client._token_value() == "at-cc"
+    assert calls == ["client_credentials"]
+
+
 def test_recommended_products_has_different_enum():
     from digikey_mcp.server import KEYWORD_SEARCH_OPTIONS, RECOMMENDED_PRODUCTS_OPTIONS
 

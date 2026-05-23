@@ -16,6 +16,8 @@ from pydantic import Field
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from digikey_mcp import auth_store
+
 logger = logging.getLogger("digikey_mcp")
 
 PROD_HOST = "https://api.digikey.com"
@@ -94,16 +96,10 @@ class DigiKeyClient:
     # out a token that expires mid-flight.
     _TOKEN_REFRESH_SKEW_SEC = 60
 
-    def _fetch_token(self) -> None:
-        env = "SANDBOX" if self.api_base == SANDBOX_HOST else "PRODUCTION"
-        logger.info("Requesting OAuth token from %s (client_id=%s…)", env, self.client_id[:8])
+    def _post_token(self, data: dict[str, str]) -> dict[str, Any]:
         resp = self._session.post(
             self.token_url,
-            data={
-                "grant_type": "client_credentials",
-                "client_id": self.client_id,
-                "client_secret": self.client_secret,
-            },
+            data=data,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             timeout=15,
         )
@@ -112,29 +108,68 @@ class DigiKeyClient:
             logger.error("OAuth error %s: %s", resp.status_code, detail)
             raise DigiKeyAPIError(
                 f"DigiKey OAuth failed ({resp.status_code}): {detail}. "
-                "Check CLIENT_ID/CLIENT_SECRET and USE_SANDBOX."
+                "Check CLIENT_ID/CLIENT_SECRET and (if logged in) refresh_token validity."
             )
-        payload = resp.json()
-        # DigiKey returns expires_in in seconds (typically ~600). Fall back to a
-        # conservative 5min if missing.
+        return resp.json()
+
+    def _fetch_token_client_credentials(self) -> None:
+        env = "SANDBOX" if self.api_base == SANDBOX_HOST else "PRODUCTION"
+        logger.info("Requesting OAuth token from %s via client_credentials", env)
+        payload = self._post_token({
+            "grant_type": "client_credentials",
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+        })
+        self._set_token(payload, persist=None)
+
+    def _fetch_token_refresh(self, refresh_token: str) -> None:
+        logger.info("Refreshing OAuth user token via refresh_token grant")
+        payload = self._post_token({
+            "grant_type": "refresh_token",
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+            "refresh_token": refresh_token,
+        })
+        # DigiKey may rotate the refresh_token, or return only an access_token.
+        new_refresh = payload.get("refresh_token", refresh_token)
+        self._set_token(payload, persist=new_refresh)
+
+    def _set_token(self, payload: dict[str, Any], *, persist: str | None) -> None:
         expires_in = int(payload.get("expires_in", 300))
         self._token = payload["access_token"]
         self._token_expires_at = time.monotonic() + expires_in - self._TOKEN_REFRESH_SKEW_SEC
-        logger.debug(
-            "Token cached for %ds (refresh skew %ds)",
-            expires_in,
-            self._TOKEN_REFRESH_SKEW_SEC,
-        )
+        logger.debug("Token cached for %ds", expires_in)
+        if persist is not None:
+            now = time.time()
+            auth_store.save(auth_store.StoredTokens(
+                refresh_token=persist,
+                access_token=self._token,
+                expires_at=now + expires_in,
+                obtained_at=now,
+            ))
 
     def _token_value(self, *, force_refresh: bool = False) -> str:
         with self._token_lock:
-            if (
-                force_refresh
-                or self._token is None
-                or time.monotonic() >= self._token_expires_at
-            ):
-                self._fetch_token()
+            if force_refresh or self._token is None or time.monotonic() >= self._token_expires_at:
+                self._refresh_token()
             return self._token  # type: ignore[return-value]
+
+    def _refresh_token(self) -> None:
+        # Prefer the user (authorization_code) token if one is stored; fall back
+        # to client_credentials. If the refresh grant fails (revoked, expired
+        # refresh_token, etc.), drop back to client_credentials too.
+        stored = auth_store.load()
+        if stored is not None:
+            try:
+                self._fetch_token_refresh(stored.refresh_token)
+                return
+            except DigiKeyAPIError as exc:
+                logger.warning(
+                    "User refresh_token failed (%s); falling back to client_credentials. "
+                    "Run `digikey-mcp login` to re-authenticate.",
+                    exc,
+                )
+        self._fetch_token_client_credentials()
 
     def _headers(self, customer_id: str, *, force_refresh: bool = False) -> dict[str, str]:
         return {
