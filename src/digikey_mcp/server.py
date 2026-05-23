@@ -5,11 +5,12 @@ import os
 import sys
 import threading
 from dataclasses import dataclass
-from typing import Any
+from typing import Annotated, Any
 
 import requests
 from dotenv import load_dotenv
 from fastmcp import FastMCP
+from pydantic import Field
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -189,37 +190,54 @@ def _get_client() -> DigiKeyClient:
     return _client
 
 
+_SEARCH_OPTIONS_DOC = (
+    "Comma-delimited values from: ChipOutpost, Has3DModel, HasCadModel, "
+    "HasDatasheet, HasProductPhoto, InStock, NewProduct, NonRohsCompliant, "
+    "NormallyStocking, RohsCompliant."
+)
+_SORT_FIELD_DOC = (
+    "Sort field. One of: None, Packaging, ProductStatus, DigiKeyProductNumber, "
+    "ManufacturerProductNumber, Manufacturer, MinimumQuantity, QuantityAvailable, "
+    "Price, Supplier, PriceManufacturerStandardPackage."
+)
+
+
 @mcp.tool()
 def keyword_search(
-    keywords: str,
-    limit: int = 5,
-    offset: int = 0,
-    manufacturer_id: str | None = None,
-    category_id: str | None = None,
-    search_options: str | None = None,
-    sort_field: str | None = None,
-    sort_order: str = "Ascending",
+    keywords: Annotated[
+        str,
+        Field(description="Search terms or part numbers.", max_length=250),
+    ],
+    limit: Annotated[
+        int,
+        Field(description="Max results (DigiKey v4 hard cap is 50).", ge=1, le=50),
+    ] = 5,
+    offset: Annotated[
+        int,
+        Field(description="Pagination offset.", ge=0),
+    ] = 0,
+    manufacturer_id: Annotated[
+        str | None,
+        Field(description="Restrict to a manufacturer ID (from `search_manufacturers`)."),
+    ] = None,
+    category_id: Annotated[
+        str | None,
+        Field(description="Restrict to a category ID (from `search_categories`)."),
+    ] = None,
+    search_options: Annotated[
+        str | None,
+        Field(description=_SEARCH_OPTIONS_DOC),
+    ] = None,
+    sort_field: Annotated[
+        str | None,
+        Field(description=_SORT_FIELD_DOC),
+    ] = None,
+    sort_order: Annotated[
+        str,
+        Field(description="Sort direction.", pattern="^(Ascending|Descending)$"),
+    ] = "Ascending",
 ) -> dict[str, Any]:
-    """Search DigiKey products by keyword.
-
-    Args:
-        keywords: Search terms or part numbers (max 250 chars).
-        limit: Max results, 1-50 (default 5).
-        offset: Pagination offset (default 0).
-        manufacturer_id: Restrict to a manufacturer ID (from `search_manufacturers`).
-        category_id: Restrict to a category ID (from `search_categories`).
-        search_options: Comma-delimited values from: ChipOutpost, Has3DModel, HasCadModel,
-            HasDatasheet, HasProductPhoto, InStock, NewProduct, NonRohsCompliant,
-            NormallyStocking, RohsCompliant.
-        sort_field: One of None, Packaging, ProductStatus, DigiKeyProductNumber,
-            ManufacturerProductNumber, Manufacturer, MinimumQuantity, QuantityAvailable,
-            Price, Supplier, PriceManufacturerStandardPackage.
-        sort_order: Ascending or Descending (default Ascending).
-    """
-    if not 1 <= limit <= 50:
-        raise ValueError("limit must be between 1 and 50 (DigiKey Product Search v4 constraint)")
-    if offset < 0:
-        raise ValueError("offset must be >= 0")
+    """Search DigiKey products by keyword or part number."""
     body: dict[str, Any] = {"Keywords": keywords, "Limit": limit, "Offset": offset}
 
     filter_options: dict[str, Any] = {}
