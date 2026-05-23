@@ -1,109 +1,137 @@
 # DigiKey MCP Server
 
-A Model Context Protocol (MCP) server for DigiKey's Product Search API using FastMCP.
+A [Model Context Protocol](https://modelcontextprotocol.io) server that exposes DigiKey's [Product Search v4 API](https://developer.digikey.com/products/product-search/productsearch/keywordsearch) as MCP tools. Built on [FastMCP](https://github.com/jlowin/fastmcp).
 
 ## Requirements
 
 - Python 3.10+
-- uv package manager
-- DigiKey API credentials (CLIENT_ID and CLIENT_SECRET)
+- [`uv`](https://docs.astral.sh/uv/) (recommended) or `pip`
+- DigiKey API credentials (`CLIENT_ID` and `CLIENT_SECRET`) — register an app at https://developer.digikey.com/
 
-## Setup
+## Install
 
-### 1. Install dependencies
+Install as a standalone CLI in an isolated environment:
+
 ```bash
-uv sync
+uv tool install digikey-mcp
+# or, directly from this checkout:
+uv tool install .
 ```
 
-### 2. Set up environment variables
-Create a `.env` file in the project root:
+Or run without installing (uv resolves and caches on first use):
+
+```bash
+uvx digikey-mcp
 ```
+
+Or, if you prefer `pip`:
+
+```bash
+pip install .
+```
+
+Once installed, the `digikey-mcp` console script is on your `PATH`.
+
+## Configure
+
+The server reads credentials from environment variables (a `.env` file in the working directory is loaded automatically). Copy `.env.example` to `.env` and fill in:
+
+```dotenv
 CLIENT_ID=your_digikey_client_id
 CLIENT_SECRET=your_digikey_client_secret
-USE_SANDBOX=false
+USE_SANDBOX=false   # set to true to hit sandbox-api.digikey.com
 ```
 
-Set `USE_SANDBOX=true` to use DigiKey's sandbox environment for testing.
+Optional locale overrides (defaults shown):
 
-### 3. Run the server
+```dotenv
+DIGIKEY_LOCALE_SITE=US
+DIGIKEY_LOCALE_LANGUAGE=en
+DIGIKEY_LOCALE_CURRENCY=USD
+LOG_LEVEL=INFO
+```
+
+## Run
+
 ```bash
-uv run python digikey_mcp_server.py
+digikey-mcp
 ```
 
-## Available Tools
+Or from a source checkout: `uv run digikey-mcp`.
 
-### Search Methods
-- `keyword_search(keywords, limit=5, manufacturer_id=None, category_id=None, search_options=None, sort_field=None, sort_order="Ascending")` - Search DigiKey products by keyword with sorting and filtering
-- `search_manufacturers()` - Get all product manufacturers
-- `search_categories()` - Get all product categories
-- `search_product_substitutions(product_number, limit=10, search_options=None, exclude_marketplace=False)` - Find substitute products
+## Claude Desktop integration
 
-### Product Details
-- `product_details(product_number, manufacturer_id=None, customer_id="0")` - Get detailed product information
-- `get_category_by_id(category_id)` - Get specific category details
-- `get_product_media(product_number)` - Get product images, documents, and videos
-- `get_product_pricing(product_number, customer_id="0", requested_quantity=1)` - Get detailed pricing information
-- `get_digi_reel_pricing(product_number, requested_quantity, customer_id="0")` - Get DigiReel pricing
-
-### Sort Options for keyword_search
-Available sort fields:
-- `Packaging` - Sort by packaging type
-- `ProductStatus` - Sort by product status
-- `DigiKeyProductNumber` - Sort by DigiKey part number
-- `ManufacturerProductNumber` - Sort by manufacturer part number
-- `Manufacturer` - Sort by manufacturer name
-- `MinimumQuantity` - Sort by minimum order quantity
-- `QuantityAvailable` - Sort by available quantity
-- `Price` - Sort by price
-- `Supplier` - Sort by supplier
-- `PriceManufacturerStandardPackage` - Sort by manufacturer standard package price
-
-Sort orders: `Ascending` or `Descending`
-
-### Search Options
-Available filters for search methods:
-- `LeadFree` - Lead-free products only
-- `RoHSCompliant` - RoHS compliant products only
-- `InStock` - In-stock products only
-- `HasDatasheet` - Products with datasheets
-- `HasProductPhoto` - Products with photos
-- `Has3DModel` - Products with 3D models
-- `NewProduct` - New products only
-
-## Example Usage
-
-The server exposes MCP tools that can be used by MCP clients like Claude Desktop, or programmatically via FastMCP clients.
-
-### Search Examples
-```python
-# Basic keyword search
-keyword_search("resistor", limit=10)
-
-# Search with sorting by price (lowest first)
-keyword_search("capacitor", limit=5, sort_field="Price", sort_order="Ascending")
-
-# Search with filters
-keyword_search("LED", limit=10, search_options="InStock,RoHSCompliant")
-
-# Get product details
-product_details("296-8875-1-ND")
-
-# Get pricing for specific quantity
-get_product_pricing("296-8875-1-ND", requested_quantity=100)
-```
-
-## Claude Desktop Integration
-
-Add this to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) — `uvx` is the simplest path since it handles the venv for you:
 
 ```json
 {
   "mcpServers": {
     "digikey": {
-      "command": "uv",
-      "args": ["run", "python", "digikey_mcp_server.py"],
-      "cwd": "/path/to/project"
+      "command": "uvx",
+      "args": ["digikey-mcp"],
+      "env": {
+        "CLIENT_ID": "your_digikey_client_id",
+        "CLIENT_SECRET": "your_digikey_client_secret",
+        "USE_SANDBOX": "false"
+      }
     }
   }
 }
-``` 
+```
+
+If you installed via `uv tool install`, swap `command` to `digikey-mcp` and drop `args`.
+
+## Development
+
+```bash
+uv sync                     # create .venv and install deps
+uv run digikey-mcp          # run from the source tree
+uv run python -m digikey_mcp
+```
+
+## Tools
+
+### Search
+
+- `keyword_search(keywords, limit=5, offset=0, manufacturer_id=None, category_id=None, search_options=None, sort_field=None, sort_order="Ascending")` — keyword/part-number search with sort + filter.
+- `search_manufacturers()` — list all manufacturers (returns IDs usable with `keyword_search`).
+- `search_categories()` / `get_category_by_id(category_id)` — list/inspect categories.
+- `search_product_substitutions(product_number, includes=None)` — find substitute parts.
+
+### Product detail
+
+- `product_details(product_number, manufacturer_id=None, customer_id="0")`
+- `get_product_media(product_number)` — images, datasheets, videos.
+- `get_product_pricing(product_number, customer_id="0", requested_quantity=1)`
+- `get_digi_reel_pricing(product_number, requested_quantity, customer_id="0")`
+
+### `keyword_search` filters
+
+`search_options` is a comma-delimited string. Valid values (from the v4 swagger):
+
+```
+ChipOutpost, Has3DModel, HasCadModel, HasDatasheet, HasProductPhoto,
+InStock, NewProduct, NonRohsCompliant, NormallyStocking, RohsCompliant
+```
+
+> ⚠️ Note: the v4 enum is `RohsCompliant` (not `RoHSCompliant`), and there is no `LeadFree` option — earlier versions of this README listed those, but they cause the API to silently ignore the filter.
+
+### `keyword_search` sort fields
+
+```
+None, Packaging, ProductStatus, DigiKeyProductNumber, ManufacturerProductNumber,
+Manufacturer, MinimumQuantity, QuantityAvailable, Price, Supplier,
+PriceManufacturerStandardPackage
+```
+
+`sort_order` is `Ascending` or `Descending`.
+
+## Examples
+
+```python
+keyword_search("resistor", limit=10)
+keyword_search("capacitor", limit=5, sort_field="Price", sort_order="Ascending")
+keyword_search("LED", limit=10, search_options="InStock,RohsCompliant")
+product_details("296-8875-1-ND")
+get_product_pricing("296-8875-1-ND", requested_quantity=100)
+```
