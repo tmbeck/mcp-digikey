@@ -125,42 +125,59 @@ def test_search_options_validator_handles_none_and_empty():
     assert _parse_search_options("  ,  ", KEYWORD_SEARCH_OPTIONS, "search_options") == []
 
 
-def test_arg_parser_recognizes_check_credentials():
+def test_arg_parser_subcommands_registered():
     from digikey_mcp.server import _build_arg_parser
 
     parser = _build_arg_parser()
-    args = parser.parse_args(["--check-credentials"])
-    assert args.check_credentials is True
+    # Each subcommand should parse cleanly.
+    for cmd in ("serve", "check-credentials", "login", "logout"):
+        args = parser.parse_args([cmd])
+        assert args.cmd == cmd
 
+    # No subcommand -> cmd is None, main() defaults it to "serve".
     args = parser.parse_args([])
-    assert args.check_credentials is False
+    assert args.cmd is None
 
 
-def test_arg_parser_transport_defaults_and_overrides(monkeypatch):
+def test_arg_parser_serve_transport_defaults_and_overrides(monkeypatch):
+    monkeypatch.delenv("DIGIKEY_MCP_TRANSPORT", raising=False)
+    monkeypatch.delenv("DIGIKEY_MCP_HOST", raising=False)
+    monkeypatch.delenv("DIGIKEY_MCP_PORT", raising=False)
     from digikey_mcp.server import _build_arg_parser
 
-    monkeypatch.delenv("DIGIKEY_MCP_TRANSPORT", raising=False)
-    args = _build_arg_parser().parse_args([])
+    args = _build_arg_parser().parse_args(["serve"])
     assert args.transport == "stdio"
     assert args.host == "127.0.0.1"
     assert args.port == 8000
 
     args = _build_arg_parser().parse_args(
-        ["--transport", "http", "--host", "0.0.0.0", "--port", "9999"]
+        ["serve", "--transport", "http", "--host", "0.0.0.0", "--port", "9999"]
     )
     assert args.transport == "http"
     assert args.host == "0.0.0.0"
     assert args.port == 9999
 
 
-def test_arg_parser_transport_env_override(monkeypatch):
+def test_arg_parser_serve_env_override(monkeypatch):
     monkeypatch.setenv("DIGIKEY_MCP_TRANSPORT", "http")
     monkeypatch.setenv("DIGIKEY_MCP_PORT", "5555")
     from digikey_mcp.server import _build_arg_parser
 
-    args = _build_arg_parser().parse_args([])
+    args = _build_arg_parser().parse_args(["serve"])
     assert args.transport == "http"
     assert args.port == 5555
+
+
+def test_arg_parser_login_options():
+    from digikey_mcp.server import _build_arg_parser
+
+    args = _build_arg_parser().parse_args(
+        ["login", "--port", "9000", "--redirect-uri", "http://x.test/cb", "--no-browser"]
+    )
+    assert args.cmd == "login"
+    assert args.port == 9000
+    assert args.redirect_uri == "http://x.test/cb"
+    assert args.no_browser is True
 
 
 class _FakeResp:

@@ -16,7 +16,7 @@ from pydantic import Field
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from digikey_mcp import auth_store
+from digikey_mcp import auth_store, oauth_login
 
 logger = logging.getLogger("digikey_mcp")
 
@@ -609,43 +609,66 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         prog="digikey-mcp",
         description="MCP server for DigiKey's Product Search v4 API.",
     )
-    parser.add_argument(
-        "--check-credentials",
-        action="store_true",
-        help="Verify CLIENT_ID/SECRET (via a one-shot OAuth + /manufacturers call) and exit.",
-    )
-    parser.add_argument(
+    sub = parser.add_subparsers(dest="cmd")
+
+    serve = sub.add_parser("serve", help="Run the MCP server (default).")
+    serve.add_argument(
         "--transport",
         choices=("stdio", "http"),
         default=os.getenv("DIGIKEY_MCP_TRANSPORT", "stdio"),
         help="Transport mode (default: stdio; env DIGIKEY_MCP_TRANSPORT).",
     )
-    parser.add_argument(
+    serve.add_argument(
         "--host",
         default=os.getenv("DIGIKEY_MCP_HOST", "127.0.0.1"),
         help="Bind host for --transport http (default: 127.0.0.1; env DIGIKEY_MCP_HOST).",
     )
-    parser.add_argument(
+    serve.add_argument(
         "--port",
         type=int,
         default=int(os.getenv("DIGIKEY_MCP_PORT", "8000")),
         help="Bind port for --transport http (default: 8000; env DIGIKEY_MCP_PORT).",
     )
+
+    sub.add_parser(
+        "check-credentials",
+        help="Verify CLIENT_ID/SECRET against DigiKey and exit (0=ok, 1=fail).",
+    )
+
+    login = sub.add_parser(
+        "login",
+        help="Authorize via DigiKey in a browser; saves a refresh token to disk.",
+    )
+    login.add_argument(
+        "--port",
+        type=int,
+        default=oauth_login.DEFAULT_CALLBACK_PORT,
+        help=(
+            f"Port for the local callback listener (default: "
+            f"{oauth_login.DEFAULT_CALLBACK_PORT}). Must match the redirect URI "
+            "registered with your DigiKey app."
+        ),
+    )
+    login.add_argument(
+        "--redirect-uri",
+        default=os.getenv("DIGIKEY_OAUTH_REDIRECT_URI"),
+        help=(
+            "Redirect URI registered with your DigiKey app "
+            "(default: http://localhost:<port>/oauth/callback). "
+            "Set via env DIGIKEY_OAUTH_REDIRECT_URI."
+        ),
+    )
+    login.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="Don't open the browser automatically; just print the auth URL.",
+    )
+
+    sub.add_parser("logout", help="Delete the stored refresh/access tokens.")
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = _build_arg_parser().parse_args(argv)
-    # stdio transport reserves stdout for JSON-RPC; force logging to stderr.
-    # http transport doesn't share stdout but stderr-only is still the safe default.
-    logging.basicConfig(
-        level=os.getenv("LOG_LEVEL", "INFO").upper(),
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        stream=sys.stderr,
-        force=True,
-    )
-    if args.check_credentials:
-        return _check_credentials()
+def _do_serve(args: argparse.Namespace) -> int:
     if args.transport == "http":
         logger.info("Starting DigiKey MCP server on http://%s:%d", args.host, args.port)
         mcp.run(transport="http", host=args.host, port=args.port)
@@ -653,6 +676,78 @@ def main(argv: list[str] | None = None) -> int:
         logger.info("Starting DigiKey MCP server on stdio")
         mcp.run(transport="stdio")
     return 0
+
+
+def _do_login(args: argparse.Namespace) -> int:
+    load_dotenv()
+    client_id = os.getenv("CLIENT_ID")
+    client_secret = os.getenv("CLIENT_SECRET")
+    if not client_id or not client_secret:
+        print(
+            "CLIENT_ID and CLIENT_SECRET must be set (in the environment or .env). "
+            "Register an app at https://developer.digikey.com/ first.",
+            file=sys.stderr,
+        )
+        return 1
+    api_base = SANDBOX_HOST if _env_bool("USE_SANDBOX", default=False) else PROD_HOST
+    redirect_uri = args.redirect_uri or f"http://localhost:{args.port}/oauth/callback"
+    cfg = oauth_login.OAuthConfig(
+        api_base=api_base,
+        client_id=client_id,
+        client_secret=client_secret,
+        redirect_uri=redirect_uri,
+    )
+    try:
+        tokens = oauth_login.run_login(
+            cfg,
+            port=args.port,
+            open_browser=not args.no_browser,
+        )
+    except (TimeoutError, RuntimeError) as exc:
+        print(f"Login failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"Logged in. Tokens saved to {auth_store.token_path()}")
+    print(
+        f"Access token valid for ~{int(tokens.expires_at - tokens.obtained_at)}s; "
+        "refresh_token will be used automatically on subsequent calls."
+    )
+    return 0
+
+
+def _do_logout(_args: argparse.Namespace) -> int:
+    if auth_store.delete():
+        print(f"Removed {auth_store.token_path()}")
+    else:
+        print(f"No stored tokens at {auth_store.token_path()}")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    # MCP stdio transport reserves stdout for JSON-RPC; force all logging to stderr.
+    # http transport doesn't share stdout but stderr-only is still the safe default.
+    logging.basicConfig(
+        level=os.getenv("LOG_LEVEL", "INFO").upper(),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        stream=sys.stderr,
+        force=True,
+    )
+    args = _build_arg_parser().parse_args(argv)
+    cmd = args.cmd or "serve"  # default subcommand
+    if cmd == "serve":
+        # When no subcommand was given, the `serve`-only attributes
+        # (transport/host/port) don't exist on the Namespace — populate defaults.
+        if not hasattr(args, "transport"):
+            args.transport = os.getenv("DIGIKEY_MCP_TRANSPORT", "stdio")
+            args.host = os.getenv("DIGIKEY_MCP_HOST", "127.0.0.1")
+            args.port = int(os.getenv("DIGIKEY_MCP_PORT", "8000"))
+        return _do_serve(args)
+    if cmd == "check-credentials":
+        return _check_credentials()
+    if cmd == "login":
+        return _do_login(args)
+    if cmd == "logout":
+        return _do_logout(args)
+    raise AssertionError(f"unknown subcommand: {cmd}")
 
 
 if __name__ == "__main__":
