@@ -123,12 +123,26 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
 
 If you installed via `uv tool install`, swap `command` to `digikey-mcp` and drop `args`.
 
+## CLI flags
+
+```
+digikey-mcp [--check-credentials] [--transport {stdio,http}]
+            [--host HOST] [--port PORT]
+```
+
+- `--check-credentials` — fetch an OAuth token + call `/search/manufacturers`, print PASS/FAIL, and exit. Use to debug `.mcp.json` / `claude_desktop_config.json` wiring without launching the server.
+- `--transport stdio` (default) — JSON-RPC over stdin/stdout; what MCP clients launch.
+- `--transport http` — streamable HTTP at `http://<host>:<port>/mcp/`. Heavier startup (~10-15s due to FastMCP's background worker init); useful for running as a persistent service.
+- `--host` / `--port` — bind address for HTTP mode (defaults `127.0.0.1:8000`). Also `DIGIKEY_MCP_TRANSPORT` / `DIGIKEY_MCP_HOST` / `DIGIKEY_MCP_PORT` env vars.
+
 ## Development
 
 ```bash
-uv sync                     # create .venv and install deps
-uv run digikey-mcp          # run from the source tree
-uv run python -m digikey_mcp
+uv sync                          # create .venv and install deps + dev tools
+uv run digikey-mcp                # run from the source tree
+uv run python -m digikey_mcp     # equivalent
+uv run pytest                    # smoke tests (no network)
+uv run ruff check .              # lint
 ```
 
 ## Tools
@@ -139,24 +153,33 @@ uv run python -m digikey_mcp
 - `search_manufacturers()` — list all manufacturers (returns IDs usable with `keyword_search`).
 - `search_categories()` / `get_category_by_id(category_id)` — list/inspect categories.
 - `search_product_substitutions(product_number, includes=None)` — find substitute parts.
+- `get_product_associations(product_number)` — eval boards, mating connectors, accessories.
+- `get_recommended_products(product_number, limit=1, search_options=None, exclude_marketplace=False)` — DigiKey's "you might also like."
 
 ### Product detail
 
 - `product_details(product_number, manufacturer_id=None, customer_id="0")`
 - `get_product_media(product_number)` — images, datasheets, videos.
-- `get_product_pricing(product_number, customer_id="0", requested_quantity=1)`
-- `get_digi_reel_pricing(product_number, requested_quantity, customer_id="0")`
+- `get_alternate_packaging(product_number)` — tape-and-reel vs cut tape etc.
+
+### Pricing
+
+- `get_product_pricing(product_number, customer_id="0", limit=5, offset=0, in_stock=False, exclude_marketplace=False, exclude_tariff=False)` — multi-match product pricing with filters.
+- `get_pricing_by_quantity(product_number, requested_quantity, manufacturer_id=None, customer_id="0")` — pricing options (Exact / MinimumOrderQuantity / MaxOrderQuantity / BetterValue) at a specific quantity.
+- `get_digi_reel_pricing(product_number, requested_quantity, customer_id="0")` — DigiReel pricing.
 
 ### `keyword_search` filters
 
-`search_options` is a comma-delimited string. Valid values (from the v4 swagger):
+`search_options` is a comma-delimited string, validated against the v4 swagger enum:
 
 ```
 ChipOutpost, Has3DModel, HasCadModel, HasDatasheet, HasProductPhoto,
 InStock, NewProduct, NonRohsCompliant, NormallyStocking, RohsCompliant
 ```
 
-> ⚠️ Note: the v4 enum is `RohsCompliant` (not `RoHSCompliant`), and there is no `LeadFree` option — earlier versions of this README listed those, but they cause the API to silently ignore the filter.
+Unknown values are rejected with a clear `ValueError` listing the actual allowed set.
+
+> ⚠️ `get_recommended_products` uses a **different** enum (`LeadFree, CollapsePackingTypes, ExcludeNonStock, Has3DModel, InStock, ManufacturerPartSearch, NewProductsOnly, RoHSCompliant`). Same `search_options` parameter name, different valid values — the validator catches mistakes per tool.
 
 ### `keyword_search` sort fields
 
@@ -175,5 +198,6 @@ keyword_search("resistor", limit=10)
 keyword_search("capacitor", limit=5, sort_field="Price", sort_order="Ascending")
 keyword_search("LED", limit=10, search_options="InStock,RohsCompliant")
 product_details("296-8875-1-ND")
-get_product_pricing("296-8875-1-ND", requested_quantity=100)
+get_pricing_by_quantity("296-8875-1-ND", requested_quantity=100)
+get_product_associations("296-8875-1-ND")
 ```

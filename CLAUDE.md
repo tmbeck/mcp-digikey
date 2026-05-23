@@ -9,16 +9,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-uv sync                              # install deps into .venv from uv.lock
-uv run digikey-mcp                   # run the server from the source tree
-uv run python -m digikey_mcp         # equivalent, via __main__.py
+uv sync                              # install deps + dev tools from uv.lock
+uv run digikey-mcp                   # run the server from the source tree (stdio)
+uv run digikey-mcp --transport http  # run as HTTP server on 127.0.0.1:8000
+uv run digikey-mcp --check-credentials  # one-shot auth health check, exits 0/1
+uv run python -m digikey_mcp         # equivalent to `uv run digikey-mcp`
+uv run pytest                         # smoke tests, no network, ~0.5s
+uv run ruff check .                  # lint
 uv build                             # build sdist + wheel into dist/
 uv tool install .                    # install the CLI globally (isolated env)
 uvx digikey-mcp                      # run without installing
 uv add <package>                     # add a dependency
 ```
-
-No test suite, linter, or formatter is configured.
 
 ## Environment
 
@@ -37,6 +39,10 @@ No test suite, linter, or formatter is configured.
 - **`/substitutions` only accepts `productNumber` + `includes`** per the v4 swagger. Don't add `limit` / `excludeMarketPlaceProducts` query params — DigiKey ignores them, and filtering must happen client-side.
 - **stdio safety.** This server uses FastMCP's default stdio transport, which reserves stdout for JSON-RPC frames. `main()` forces logging to `sys.stderr` with `force=True`; never add `print()` calls or other stdout writes inside tools or module-level code — they will corrupt the protocol stream and the client will disconnect.
 - **HTTP errors are surfaced as `DigiKeyAPIError`** (with the truncated DigiKey response body included) rather than `requests.HTTPError`, so MCP clients see something useful.
+- **Two pricing endpoints with different shapes.** `get_product_pricing` -> `/search/{n}/pricing` is multi-match with `limit`/`offset`/filters; `get_pricing_by_quantity` -> `/search/{n}/pricingbyquantity/{qty}` is single-match with quantity in the path. Earlier code had a single `get_product_pricing` calling a nonexistent `/productpricing` URL — don't accidentally restore that pattern.
+- **Two `search_options` enums.** `keyword_search` and `get_recommended_products` accept the same parameter name with *different valid values* (see `KEYWORD_SEARCH_OPTIONS` vs `RECOMMENDED_PRODUCTS_OPTIONS` in `server.py`). `_parse_search_options()` validates per-endpoint; adding a new endpoint that takes search options needs its own enum constant.
+- **HTTP transport startup is slow** (~10-15s) because FastMCP spawns a docket worker. Stdio startup is instant. If you're benchmarking, this isn't our latency.
+- **Token refresh is proactive.** The client stores `_token_expires_at` (monotonic time) based on `expires_in` from DigiKey's response; `_token_value()` refreshes proactively. The 401-retry path in `request()` is a safety net for clock drift / unexpected revocation, not the primary refresh mechanism.
 
 ## Reference material
 
