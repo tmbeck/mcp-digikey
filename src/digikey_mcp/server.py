@@ -10,6 +10,8 @@ from typing import Any
 import requests
 from dotenv import load_dotenv
 from fastmcp import FastMCP
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 logger = logging.getLogger("digikey_mcp")
 
@@ -43,6 +45,21 @@ class Locale:
     currency: str = "USD"
 
 
+def _build_retry_adapter() -> HTTPAdapter:
+    # Retry transient failures: rate-limits (429) and server errors (5xx).
+    # urllib3 honors Retry-After by default. Retry on all our methods —
+    # every DigiKey call we make is an idempotent read.
+    retry = Retry(
+        total=3,
+        backoff_factor=0.5,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=frozenset({"GET", "POST"}),
+        raise_on_status=False,
+        respect_retry_after_header=True,
+    )
+    return HTTPAdapter(max_retries=retry)
+
+
 class DigiKeyClient:
     """Thin wrapper around DigiKey Product Search v4.
 
@@ -65,6 +82,7 @@ class DigiKeyClient:
         self.token_url = f"{self.api_base}/v1/oauth2/token"
         self.locale = locale or Locale()
         self._session = requests.Session()
+        self._session.mount("https://", _build_retry_adapter())
         self._token: str | None = None
         self._token_lock = threading.Lock()
 
