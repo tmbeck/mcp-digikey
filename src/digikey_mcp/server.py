@@ -342,20 +342,70 @@ def get_product_media(product_number: str) -> dict[str, Any]:
 def get_product_pricing(
     product_number: str,
     customer_id: str = "0",
-    requested_quantity: int = 1,
+    limit: int = 5,
+    offset: int = 0,
+    in_stock: bool = False,
+    exclude_marketplace: bool = False,
+    exclude_tariff: bool = False,
 ) -> dict[str, Any]:
-    """Get detailed pricing information for a product.
+    """Get pricing information for products matching a product number.
+
+    Returns up to `limit` matched products (DigiKey caps this at 10) with
+    pricing tiers. MyPricing is included if the customer_id resolves to
+    a registered account.
 
     Args:
-        product_number: The product to get pricing for.
-        customer_id: Customer ID for pricing (default "0").
-        requested_quantity: Quantity for pricing calculation (default 1).
+        product_number: Manufacturer or DigiKey part number; partial matches allowed.
+        customer_id: Customer ID for MyPricing (default "0").
+        limit: Max products to return, 1-10 (default 5).
+        offset: Pagination offset (default 0).
+        in_stock: Only return in-stock products.
+        exclude_marketplace: Only return DigiKey-fulfilled products.
+        exclude_tariff: Exclude products subject to tariffs.
     """
     return _get_client().request(
         "GET",
-        f"/products/v4/search/{product_number}/productpricing",
+        f"/products/v4/search/{product_number}/pricing",
         customer_id=customer_id,
-        params={"requestedQuantity": requested_quantity},
+        params={
+            "limit": limit,
+            "offset": offset,
+            "inStock": in_stock,
+            "excludeMarketplace": exclude_marketplace,
+            "excludeTariff": exclude_tariff,
+        },
+    )
+
+
+@mcp.tool()
+def get_pricing_by_quantity(
+    product_number: str,
+    requested_quantity: int,
+    manufacturer_id: str | None = None,
+    customer_id: str = "0",
+) -> dict[str, Any]:
+    """Get pricing for a specific product at a specific quantity.
+
+    Returns up to four pricing options:
+    - Exact: priced at the exact quantity requested.
+    - MinimumOrderQuantity: rounded up to the part's MOQ.
+    - MaxOrderQuantity: rounded down to the part's max.
+    - BetterValue: rounded up to a manufacturer standard package when
+      the total is cheaper than the exact quantity.
+
+    Args:
+        product_number: Manufacturer or DigiKey part number.
+        requested_quantity: Quantity to price.
+        manufacturer_id: Disambiguates manufacturer part numbers that
+            map to multiple manufacturers.
+        customer_id: Customer ID for MyPricing (default "0").
+    """
+    params = {"manufacturerId": manufacturer_id} if manufacturer_id else None
+    return _get_client().request(
+        "GET",
+        f"/products/v4/search/{product_number}/pricingbyquantity/{requested_quantity}",
+        customer_id=customer_id,
+        params=params,
     )
 
 

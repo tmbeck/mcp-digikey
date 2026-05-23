@@ -17,6 +17,7 @@ EXPECTED_TOOLS = {
     "search_product_substitutions",
     "get_product_media",
     "get_product_pricing",
+    "get_pricing_by_quantity",
     "get_digi_reel_pricing",
 }
 
