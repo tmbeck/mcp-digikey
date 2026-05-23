@@ -10,27 +10,21 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server that exposes 
 
 ## Install
 
-Install as a standalone CLI in an isolated environment:
+Install as a standalone CLI in an isolated environment (this is the recommended path):
 
 ```bash
-uv tool install digikey-mcp
-# or, directly from this checkout:
+# From a local checkout:
 uv tool install .
+
+# Or straight from GitHub:
+uv tool install git+https://github.com/tmbeck/mcp-digikey
 ```
 
-Or run without installing (uv resolves and caches on first use):
+After install, `digikey-mcp` is on your `PATH`.
 
-```bash
-uvx digikey-mcp
-```
+For development work from a source checkout, `uv run digikey-mcp` runs it without installing globally.
 
-Or, if you prefer `pip`:
-
-```bash
-pip install .
-```
-
-Once installed, the `digikey-mcp` console script is on your `PATH`.
+> Note: this package isn't on PyPI, so `uvx digikey-mcp` won't work — `uvx` resolves package names against PyPI. Use `uv tool install` as above.
 
 ## Configure
 
@@ -72,7 +66,7 @@ In production, the server is launched as a subprocess by an MCP client (Claude D
      "mcpServers": {
        "digikey": {
          "command": "op",
-         "args": ["run", "--no-masking", "--", "uvx", "digikey-mcp"]
+         "args": ["run", "--no-masking", "--", "digikey-mcp"]
        }
      }
    }
@@ -83,14 +77,13 @@ In production, the server is launched as a subprocess by an MCP client (Claude D
 
 ## Claude Code (project-level)
 
-Copy `.mcp.json.example` to `.mcp.json` (gitignored), fill in your credentials, and Claude Code will pick it up when you open this project. The file format is:
+First, `uv tool install` the package so `digikey-mcp` is on your PATH (see Install above). Then copy `.mcp.json.example` to `.mcp.json` (gitignored), fill in your credentials, and Claude Code will pick it up when you open this project. The file format is:
 
 ```json
 {
   "mcpServers": {
     "digikey": {
-      "command": "uvx",
-      "args": ["digikey-mcp"],
+      "command": "digikey-mcp",
       "env": {
         "CLIENT_ID": "your_client_id",
         "CLIENT_SECRET": "your_client_secret",
@@ -103,14 +96,13 @@ Copy `.mcp.json.example` to `.mcp.json` (gitignored), fill in your credentials, 
 
 ## Claude Desktop integration
 
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) — `uvx` is the simplest path since it handles the venv for you:
+After `uv tool install`, add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 
 ```json
 {
   "mcpServers": {
     "digikey": {
-      "command": "uvx",
-      "args": ["digikey-mcp"],
+      "command": "digikey-mcp",
       "env": {
         "CLIENT_ID": "your_digikey_client_id",
         "CLIENT_SECRET": "your_digikey_client_secret",
@@ -121,7 +113,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
 }
 ```
 
-If you installed via `uv tool install`, swap `command` to `digikey-mcp` and drop `args`.
+If `digikey-mcp` isn't on Claude Desktop's PATH (it doesn't always inherit your shell's), use the absolute path — run `which digikey-mcp` to find it (typically `~/.local/bin/digikey-mcp`).
 
 ## CLI flags
 

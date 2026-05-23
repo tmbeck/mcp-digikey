@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-`digikey-mcp` is a FastMCP server that exposes DigiKey's Product Search v4 REST API as MCP tools. Distributed as an installable package: `uv tool install .` (or `uvx digikey-mcp`) puts a `digikey-mcp` console script on the user's PATH (entry point declared in `pyproject.toml` `[project.scripts]`). Build backend is `hatchling`; the package lives under `src/digikey_mcp/`.
+`digikey-mcp` is a FastMCP server that exposes DigiKey's Product Search v4 REST API as MCP tools. Distributed as an installable package: `uv tool install .` (from a checkout) or `uv tool install git+https://github.com/tmbeck/mcp-digikey` puts a `digikey-mcp` console script on the user's PATH (entry point declared in `pyproject.toml` `[project.scripts]`). Build backend is `hatchling`; the package lives under `src/digikey_mcp/`. Not published to PyPI, so `uvx digikey-mcp` doesn't work — `uvx` resolves names against PyPI.
 
 ## Commands
 
@@ -17,8 +17,8 @@ uv run python -m digikey_mcp         # equivalent to `uv run digikey-mcp`
 uv run pytest                         # smoke tests, no network, ~0.5s
 uv run ruff check .                  # lint
 uv build                             # build sdist + wheel into dist/
-uv tool install .                    # install the CLI globally (isolated env)
-uvx digikey-mcp                      # run without installing
+uv tool install .                    # install the CLI globally from a checkout
+uv tool install git+https://github.com/tmbeck/mcp-digikey  # ...or from GitHub
 uv add <package>                     # add a dependency
 ```
 
