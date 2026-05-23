@@ -125,148 +125,42 @@ def test_search_options_validator_handles_none_and_empty():
     assert _parse_search_options("  ,  ", KEYWORD_SEARCH_OPTIONS, "search_options") == []
 
 
-def test_arg_parser_subcommands_registered():
+def test_arg_parser_recognizes_check_credentials():
     from digikey_mcp.server import _build_arg_parser
 
     parser = _build_arg_parser()
-    # Each subcommand should parse cleanly.
-    for cmd in ("serve", "check-credentials", "login", "logout"):
-        args = parser.parse_args([cmd])
-        assert args.cmd == cmd
+    args = parser.parse_args(["--check-credentials"])
+    assert args.check_credentials is True
 
-    # No subcommand -> cmd is None, main() defaults it to "serve".
     args = parser.parse_args([])
-    assert args.cmd is None
+    assert args.check_credentials is False
 
 
-def test_arg_parser_serve_transport_defaults_and_overrides(monkeypatch):
-    monkeypatch.delenv("DIGIKEY_MCP_TRANSPORT", raising=False)
-    monkeypatch.delenv("DIGIKEY_MCP_HOST", raising=False)
-    monkeypatch.delenv("DIGIKEY_MCP_PORT", raising=False)
+def test_arg_parser_transport_defaults_and_overrides(monkeypatch):
     from digikey_mcp.server import _build_arg_parser
 
-    args = _build_arg_parser().parse_args(["serve"])
+    monkeypatch.delenv("DIGIKEY_MCP_TRANSPORT", raising=False)
+    args = _build_arg_parser().parse_args([])
     assert args.transport == "stdio"
     assert args.host == "127.0.0.1"
     assert args.port == 8000
 
     args = _build_arg_parser().parse_args(
-        ["serve", "--transport", "http", "--host", "0.0.0.0", "--port", "9999"]
+        ["--transport", "http", "--host", "0.0.0.0", "--port", "9999"]
     )
     assert args.transport == "http"
     assert args.host == "0.0.0.0"
     assert args.port == 9999
 
 
-def test_arg_parser_serve_env_override(monkeypatch):
+def test_arg_parser_transport_env_override(monkeypatch):
     monkeypatch.setenv("DIGIKEY_MCP_TRANSPORT", "http")
     monkeypatch.setenv("DIGIKEY_MCP_PORT", "5555")
     from digikey_mcp.server import _build_arg_parser
 
-    args = _build_arg_parser().parse_args(["serve"])
+    args = _build_arg_parser().parse_args([])
     assert args.transport == "http"
     assert args.port == 5555
-
-
-def test_arg_parser_login_options():
-    from digikey_mcp.server import _build_arg_parser
-
-    args = _build_arg_parser().parse_args(
-        ["login", "--port", "9000", "--redirect-uri", "http://x.test/cb", "--no-browser"]
-    )
-    assert args.cmd == "login"
-    assert args.port == 9000
-    assert args.redirect_uri == "http://x.test/cb"
-    assert args.no_browser is True
-
-
-class _FakeResp:
-    def __init__(self, status: int, body: dict):
-        self.status_code = status
-        self._body = body
-        self.text = str(body)
-
-    def json(self):
-        return self._body
-
-
-def test_client_prefers_stored_user_token_over_client_credentials(monkeypatch, tmp_path):
-    """When tokens.json exists, refresh_token grant is tried first."""
-    monkeypatch.setenv("DIGIKEY_MCP_TOKENS_PATH", str(tmp_path / "tokens.json"))
-    import time as _time
-
-    from digikey_mcp import auth_store
-    from digikey_mcp.server import DigiKeyClient
-
-    auth_store.save(auth_store.StoredTokens(
-        refresh_token="rt-abc",
-        access_token="at-stale",
-        expires_at=_time.time() - 1,  # expired
-        obtained_at=_time.time() - 3600,
-    ))
-
-    client = DigiKeyClient("cid", "secret", use_sandbox=False)
-    calls = []
-
-    def fake_post(url, data, **kwargs):
-        calls.append(data["grant_type"])
-        assert data["grant_type"] == "refresh_token"
-        assert data["refresh_token"] == "rt-abc"
-        return _FakeResp(
-            200,
-            {"access_token": "at-new", "refresh_token": "rt-new", "expires_in": 600},
-        )
-
-    monkeypatch.setattr(client._session, "post", fake_post)
-    assert client._token_value() == "at-new"
-    assert calls == ["refresh_token"]
-
-    # Rotated refresh_token persisted back to disk.
-    reloaded = auth_store.load()
-    assert reloaded.refresh_token == "rt-new"
-    assert reloaded.access_token == "at-new"
-
-
-def test_client_falls_back_to_client_credentials_when_refresh_fails(monkeypatch, tmp_path):
-    monkeypatch.setenv("DIGIKEY_MCP_TOKENS_PATH", str(tmp_path / "tokens.json"))
-    from digikey_mcp import auth_store
-    from digikey_mcp.server import DigiKeyClient
-
-    auth_store.save(auth_store.StoredTokens(
-        refresh_token="rt-revoked",
-        access_token="at-stale",
-        expires_at=0,
-        obtained_at=0,
-    ))
-
-    client = DigiKeyClient("cid", "secret")
-    calls = []
-
-    def fake_post(url, data, **kwargs):
-        calls.append(data["grant_type"])
-        if data["grant_type"] == "refresh_token":
-            return _FakeResp(400, {"error": "invalid_grant"})
-        return _FakeResp(200, {"access_token": "at-cc", "expires_in": 600})
-
-    monkeypatch.setattr(client._session, "post", fake_post)
-    assert client._token_value() == "at-cc"
-    assert calls == ["refresh_token", "client_credentials"]
-
-
-def test_client_uses_client_credentials_when_no_stored_tokens(monkeypatch, tmp_path):
-    monkeypatch.setenv("DIGIKEY_MCP_TOKENS_PATH", str(tmp_path / "tokens.json"))
-    from digikey_mcp.server import DigiKeyClient
-
-    client = DigiKeyClient("cid", "secret")
-    calls = []
-
-    def fake_post(url, data, **kwargs):
-        calls.append(data["grant_type"])
-        return _FakeResp(200, {"access_token": "at-cc", "expires_in": 600})
-
-    monkeypatch.setattr(client._session, "post", fake_post)
-    assert client._token_value() == "at-cc"
-    assert calls == ["client_credentials"]
 
 
 def test_recommended_products_has_different_enum():

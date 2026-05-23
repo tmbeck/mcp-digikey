@@ -21,7 +21,6 @@ dependencies = [
     "fastmcp>=2.14,<3",
     "requests>=2.32",
     "python-dotenv>=1.0",
-    "platformdirs>=4",
 ]
 
 [project.scripts]
