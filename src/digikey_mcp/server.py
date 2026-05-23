@@ -329,6 +329,64 @@ def search_product_substitutions(
 
 
 @mcp.tool()
+def get_alternate_packaging(product_number: str) -> dict[str, Any]:
+    """Get alternate packaging options for a product (e.g. tape-and-reel vs cut tape).
+
+    Works best with a DigiKey product number.
+
+    Args:
+        product_number: The product to look up.
+    """
+    return _get_client().request(
+        "GET",
+        f"/products/v4/search/{product_number}/alternatepackaging",
+    )
+
+
+@mcp.tool()
+def get_product_associations(product_number: str) -> dict[str, Any]:
+    """Get associated products for a part (eval boards, mating connectors, accessories).
+
+    Works best with a DigiKey product number.
+
+    Args:
+        product_number: The product to look up.
+    """
+    return _get_client().request(
+        "GET",
+        f"/products/v4/search/{product_number}/associations",
+    )
+
+
+@mcp.tool()
+def get_recommended_products(
+    product_number: str,
+    limit: int = 1,
+    search_options: str | None = None,
+    exclude_marketplace: bool = False,
+) -> dict[str, Any]:
+    """Get recommended products (DigiKey's 'you might also like') for a part.
+
+    Args:
+        product_number: The product to look up.
+        limit: Max recommendations (default 1).
+        search_options: Comma-delimited filters from a different enum than
+            keyword_search: LeadFree, CollapsePackingTypes, ExcludeNonStock,
+            Has3DModel, InStock, ManufacturerPartSearch, NewProductsOnly,
+            RoHSCompliant.
+        exclude_marketplace: Exclude marketplace products.
+    """
+    params: dict[str, Any] = {"limit": limit, "excludeMarketPlaceProducts": exclude_marketplace}
+    if search_options:
+        params["searchOptionList"] = search_options
+    return _get_client().request(
+        "GET",
+        f"/products/v4/search/{product_number}/recommendedproducts",
+        params=params,
+    )
+
+
+@mcp.tool()
 def get_product_media(product_number: str) -> dict[str, Any]:
     """Get media (images, datasheets, videos) for a product.
 
