@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "digikey": {
+      "command": "uvx",
+      "args": ["digikey-mcp"],
+      "env": {
+        "CLIENT_ID": "REPLACE_WITH_YOUR_DIGIKEY_CLIENT_ID",
+        "CLIENT_SECRET": "REPLACE_WITH_YOUR_DIGIKEY_CLIENT_SECRET",
+        "USE_SANDBOX": "false"
+      }
+    }
+  }
+}

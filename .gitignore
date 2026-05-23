@@ -1,7 +1,8 @@
-# Environment variables
+# Environment variables and MCP client configs (may contain credentials)
 .env
 .env.local
 .env.*.local
+.mcp.json
 
 # Python
 __pycache__/

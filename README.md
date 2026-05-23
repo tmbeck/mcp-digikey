@@ -59,6 +59,48 @@ digikey-mcp
 
 Or from a source checkout: `uv run digikey-mcp`.
 
+## Setting credentials in production
+
+In production, the server is launched as a subprocess by an MCP client (Claude Desktop, Claude Code, etc.), so a project-local `.env` file usually **won't** be picked up — the client's working directory isn't your repo. Choose one of:
+
+1. **Inline `env:` in the client config** (simplest). Put `CLIENT_ID` / `CLIENT_SECRET` in the `env` block of the MCP server entry (see `.mcp.json.example` and the Claude Desktop section below). The config file itself becomes the secret — keep it out of version control and restrict its permissions.
+2. **System environment**. Export `CLIENT_ID` / `CLIENT_SECRET` from your shell profile, systemd unit, or launchd plist. Omit the `env` block in the client config entirely — the server inherits the parent process's environment. Best when several tools need the same credentials.
+3. **Secret-manager wrapper**. Launch via your secret manager so plaintext never lives on disk. Example with the 1Password CLI:
+
+   ```json
+   {
+     "mcpServers": {
+       "digikey": {
+         "command": "op",
+         "args": ["run", "--no-masking", "--", "uvx", "digikey-mcp"]
+       }
+     }
+   }
+   ```
+
+   …with `CLIENT_ID = op://Vault/DigiKey/client_id` etc. in `~/.config/op/secrets`. Equivalent patterns work for `aws-vault`, `vault exec`, `doppler run`, etc.
+4. **`.env` file** (dev only). Works when you launch the server yourself from the repo with `uv run digikey-mcp`. Don't rely on it for client-launched production use.
+
+## Claude Code (project-level)
+
+Copy `.mcp.json.example` to `.mcp.json` (gitignored), fill in your credentials, and Claude Code will pick it up when you open this project. The file format is:
+
+```json
+{
+  "mcpServers": {
+    "digikey": {
+      "command": "uvx",
+      "args": ["digikey-mcp"],
+      "env": {
+        "CLIENT_ID": "your_client_id",
+        "CLIENT_SECRET": "your_client_secret",
+        "USE_SANDBOX": "false"
+      }
+    }
+  }
+}
+```
+
 ## Claude Desktop integration
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) — `uvx` is the simplest path since it handles the venv for you:
