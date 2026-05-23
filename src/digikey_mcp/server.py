@@ -210,6 +210,46 @@ def _get_client() -> DigiKeyClient:
     return _client
 
 
+# Per swagger: keyword_search's FilterOptionsRequest.SearchOptions enum.
+KEYWORD_SEARCH_OPTIONS: frozenset[str] = frozenset({
+    "ChipOutpost",
+    "Has3DModel",
+    "HasCadModel",
+    "HasDatasheet",
+    "HasProductPhoto",
+    "InStock",
+    "NewProduct",
+    "NonRohsCompliant",
+    "NormallyStocking",
+    "RohsCompliant",
+})
+
+# Per swagger: /recommendedproducts uses a different enum.
+RECOMMENDED_PRODUCTS_OPTIONS: frozenset[str] = frozenset({
+    "LeadFree",
+    "CollapsePackingTypes",
+    "ExcludeNonStock",
+    "Has3DModel",
+    "InStock",
+    "ManufacturerPartSearch",
+    "NewProductsOnly",
+    "RoHSCompliant",
+})
+
+
+def _parse_search_options(raw: str | None, allowed: frozenset[str], param_name: str) -> list[str]:
+    if not raw:
+        return []
+    values = [v.strip() for v in raw.split(",") if v.strip()]
+    unknown = [v for v in values if v not in allowed]
+    if unknown:
+        raise ValueError(
+            f"Unknown {param_name} value(s): {unknown}. "
+            f"Allowed: {sorted(allowed)}"
+        )
+    return values
+
+
 _SEARCH_OPTIONS_DOC = (
     "Comma-delimited values from: ChipOutpost, Has3DModel, HasCadModel, "
     "HasDatasheet, HasProductPhoto, InStock, NewProduct, NonRohsCompliant, "
@@ -265,10 +305,9 @@ def keyword_search(
         filter_options["ManufacturerFilter"] = [{"Id": str(manufacturer_id)}]
     if category_id:
         filter_options["CategoryFilter"] = [{"Id": str(category_id)}]
-    if search_options:
-        filter_options["SearchOptions"] = [
-            s.strip() for s in search_options.split(",") if s.strip()
-        ]
+    parsed_options = _parse_search_options(search_options, KEYWORD_SEARCH_OPTIONS, "search_options")
+    if parsed_options:
+        filter_options["SearchOptions"] = parsed_options
     if filter_options:
         body["FilterOptionsRequest"] = filter_options
 
@@ -396,9 +435,12 @@ def get_recommended_products(
             RoHSCompliant.
         exclude_marketplace: Exclude marketplace products.
     """
+    parsed_options = _parse_search_options(
+        search_options, RECOMMENDED_PRODUCTS_OPTIONS, "search_options"
+    )
     params: dict[str, Any] = {"limit": limit, "excludeMarketPlaceProducts": exclude_marketplace}
-    if search_options:
-        params["searchOptionList"] = search_options
+    if parsed_options:
+        params["searchOptionList"] = ",".join(parsed_options)
     return _get_client().request(
         "GET",
         f"/products/v4/search/{product_number}/recommendedproducts",

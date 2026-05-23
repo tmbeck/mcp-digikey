@@ -96,3 +96,40 @@ def test_retry_adapter_configured():
     assert retry.total == 3
     assert 429 in retry.status_forcelist
     assert 503 in retry.status_forcelist
+
+
+def test_search_options_validator_accepts_known():
+    from digikey_mcp.server import KEYWORD_SEARCH_OPTIONS, _parse_search_options
+
+    assert _parse_search_options(
+        "InStock,RohsCompliant", KEYWORD_SEARCH_OPTIONS, "search_options"
+    ) == ["InStock", "RohsCompliant"]
+
+
+def test_search_options_validator_rejects_unknown():
+    from digikey_mcp.server import KEYWORD_SEARCH_OPTIONS, _parse_search_options
+
+    with pytest.raises(ValueError, match="RoHSCompliant"):
+        # Classic capitalization-trap: RoHSCompliant is invalid here;
+        # the correct value for keyword_search is RohsCompliant.
+        _parse_search_options(
+            "InStock,RoHSCompliant", KEYWORD_SEARCH_OPTIONS, "search_options"
+        )
+
+
+def test_search_options_validator_handles_none_and_empty():
+    from digikey_mcp.server import KEYWORD_SEARCH_OPTIONS, _parse_search_options
+
+    assert _parse_search_options(None, KEYWORD_SEARCH_OPTIONS, "search_options") == []
+    assert _parse_search_options("", KEYWORD_SEARCH_OPTIONS, "search_options") == []
+    assert _parse_search_options("  ,  ", KEYWORD_SEARCH_OPTIONS, "search_options") == []
+
+
+def test_recommended_products_has_different_enum():
+    from digikey_mcp.server import KEYWORD_SEARCH_OPTIONS, RECOMMENDED_PRODUCTS_OPTIONS
+
+    # The endpoints share a couple of values but the enums genuinely differ.
+    assert "LeadFree" in RECOMMENDED_PRODUCTS_OPTIONS
+    assert "LeadFree" not in KEYWORD_SEARCH_OPTIONS
+    assert "RohsCompliant" in KEYWORD_SEARCH_OPTIONS
+    assert "RoHSCompliant" in RECOMMENDED_PRODUCTS_OPTIONS
