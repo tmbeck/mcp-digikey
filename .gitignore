@@ -4,6 +4,11 @@
 .env.*.local
 .mcp.json
 
+# OAuth user tokens (auth_store writes here if DIGIKEY_MCP_TOKENS_PATH points
+# at the repo; the default location is the platform user-config dir, but be
+# defensive in case anyone overrides it locally).
+tokens.json
+
 # Python
 __pycache__/
 *.py[cod]

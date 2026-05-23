@@ -9,17 +9,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-uv sync                              # install deps + dev tools from uv.lock
-uv run digikey-mcp                   # run the server from the source tree (stdio)
-uv run digikey-mcp --transport http  # run as HTTP server on 127.0.0.1:8000
-uv run digikey-mcp --check-credentials  # one-shot auth health check, exits 0/1
-uv run python -m digikey_mcp         # equivalent to `uv run digikey-mcp`
-uv run pytest                         # smoke tests, no network, ~0.5s
-uv run ruff check .                  # lint
-uv build                             # build sdist + wheel into dist/
-uv tool install .                    # install the CLI globally (isolated env)
-uvx digikey-mcp                      # run without installing
-uv add <package>                     # add a dependency
+uv sync                                      # install deps + dev tools
+uv run digikey-mcp                           # serve over stdio (default subcommand)
+uv run digikey-mcp serve --transport http    # serve over HTTP
+uv run digikey-mcp check-credentials         # one-shot auth health check
+uv run digikey-mcp login                     # browser OAuth → save refresh token
+uv run digikey-mcp logout                    # delete stored tokens
+uv run pytest                                # tests (no network, ~0.5s)
+uv run ruff check .                          # lint
+uv build                                     # build sdist + wheel
+uv tool install .                            # install CLI globally
 ```
 
 ## Environment
@@ -28,8 +27,10 @@ uv add <package>                     # add a dependency
 
 ## Architecture
 
-- **Layout.** Single package `src/digikey_mcp/`:
-  - `server.py` — FastMCP instance, `DigiKeyClient`, all `@mcp.tool()` definitions, and `main()`.
+- **Layout.** `src/digikey_mcp/`:
+  - `server.py` — FastMCP instance, `DigiKeyClient`, all `@mcp.tool()` definitions, argparse CLI, and `main()`.
+  - `auth_store.py` — JSON token persistence at the platformdirs user-config path, mode 0600 on Unix. `DIGIKEY_MCP_TOKENS_PATH` overrides for tests.
+  - `oauth_login.py` — `digikey-mcp login` flow: builds authorization URLs, runs a single-shot stdlib `http.server` on the callback port, exchanges the code at `/v1/oauth2/token`.
   - `__main__.py` — delegates to `server.main()` so `python -m digikey_mcp` works.
   - `__init__.py` — exposes `__version__` via `importlib.metadata`.
 - **`DigiKeyClient` owns the HTTP + auth concerns.** It holds a `requests.Session`, the OAuth2 client-credentials token, and a lock. Token fetch is **lazy** — nothing hits the network at import time, so `mcp.run()` starts and lists tools even if credentials are wrong (failure surfaces on the first tool call instead). On a 401, `request()` refreshes the token once and retries; further failures raise.
@@ -43,6 +44,9 @@ uv add <package>                     # add a dependency
 - **Two `search_options` enums.** `keyword_search` and `get_recommended_products` accept the same parameter name with *different valid values* (see `KEYWORD_SEARCH_OPTIONS` vs `RECOMMENDED_PRODUCTS_OPTIONS` in `server.py`). `_parse_search_options()` validates per-endpoint; adding a new endpoint that takes search options needs its own enum constant.
 - **HTTP transport startup is slow** (~10-15s) because FastMCP spawns a docket worker. Stdio startup is instant. If you're benchmarking, this isn't our latency.
 - **Token refresh is proactive.** The client stores `_token_expires_at` (monotonic time) based on `expires_in` from DigiKey's response; `_token_value()` refreshes proactively. The 401-retry path in `request()` is a safety net for clock drift / unexpected revocation, not the primary refresh mechanism.
+- **Two OAuth grant types.** `DigiKeyClient._refresh_token()` prefers `grant_type=refresh_token` when `auth_store.load()` returns stored user tokens; otherwise it uses `grant_type=client_credentials`. On refresh failure (revoked, expired refresh_token, etc.) it logs a warning and falls back to client_credentials so the server keeps working with public-data access until the user re-runs `digikey-mcp login`. Don't introduce a hard failure path here — graceful degradation is the design.
+- **OAuth redirect URI must be pre-registered.** DigiKey rejects callback URLs that aren't in the app's allowlist at developer.digikey.com. Default is `http://localhost:8765/oauth/callback`. If you change the default port/path in `oauth_login.py`, the README setup steps need to match — users *must* register the exact URL.
+- **`digikey-mcp login` uses stdlib `http.server`**, not FastMCP routes or aiohttp. Single-request lifecycle: bind → open browser → `handle_request()` until code arrives → close. Keeps the dep footprint minimal and avoids tangling the login flow with the MCP server lifecycle.
 
 ## Reference material
 

@@ -123,17 +123,48 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
 
 If you installed via `uv tool install`, swap `command` to `digikey-mcp` and drop `args`.
 
-## CLI flags
+## CLI
 
 ```
-digikey-mcp [--check-credentials] [--transport {stdio,http}]
-            [--host HOST] [--port PORT]
+digikey-mcp <subcommand> [options]
 ```
 
-- `--check-credentials` — fetch an OAuth token + call `/search/manufacturers`, print PASS/FAIL, and exit. Use to debug `.mcp.json` / `claude_desktop_config.json` wiring without launching the server.
+| Subcommand | Purpose |
+| --- | --- |
+| `serve` (default) | Run the MCP server. Use without a subcommand or as `digikey-mcp serve`. |
+| `check-credentials` | Fetch an OAuth token + call `/search/manufacturers`. Prints PASS/FAIL and exits. Useful for debugging `.mcp.json` wiring without launching the server. |
+| `login` | Open a browser, authorize the app against your DigiKey account, save a refresh token to disk. See "User OAuth" below. |
+| `logout` | Delete the stored refresh/access tokens. |
+
+`digikey-mcp serve` flags:
 - `--transport stdio` (default) — JSON-RPC over stdin/stdout; what MCP clients launch.
-- `--transport http` — streamable HTTP at `http://<host>:<port>/mcp/`. Heavier startup (~10-15s due to FastMCP's background worker init); useful for running as a persistent service.
-- `--host` / `--port` — bind address for HTTP mode (defaults `127.0.0.1:8000`). Also `DIGIKEY_MCP_TRANSPORT` / `DIGIKEY_MCP_HOST` / `DIGIKEY_MCP_PORT` env vars.
+- `--transport http` — streamable HTTP at `http://<host>:<port>/mcp/`. Heavier startup (~10-15s due to FastMCP's background worker init).
+- `--host` / `--port` — bind address for HTTP mode (defaults `127.0.0.1:8000`). Env vars: `DIGIKEY_MCP_TRANSPORT` / `_HOST` / `_PORT`.
+
+`digikey-mcp login` flags:
+- `--port` — port the temporary callback listener binds (default `8765`). Must match the redirect URI you register with your DigiKey app.
+- `--redirect-uri` — override the default callback URL. Env: `DIGIKEY_OAUTH_REDIRECT_URI`.
+- `--no-browser` — print the auth URL instead of opening a browser (useful over SSH).
+
+## User OAuth (`digikey-mcp login`)
+
+By default this server uses DigiKey's **client_credentials** OAuth flow — fine for everything except endpoints that require a user identity (MyPricing, account-scoped data). If you want those, log in as a user once and the server will use your **refresh token** transparently on every subsequent call.
+
+**One-time DigiKey app setup:**
+1. At https://developer.digikey.com/, edit your app and add a callback URL.
+2. Use `http://localhost:8765/oauth/callback` (or whatever you pass to `--port` / `--redirect-uri`).
+
+**Then:**
+```bash
+export CLIENT_ID=...
+export CLIENT_SECRET=...
+digikey-mcp login
+# → opens a browser, you authorize, "Logged in." in the terminal
+```
+
+Tokens are saved to the platform user-config directory (`~/.config/digikey-mcp/tokens.json` on Linux/macOS) with mode 0600. The MCP server picks them up on next launch and refreshes the access token via `grant_type=refresh_token` whenever it expires. If the refresh ever fails (revoked, etc.) the server transparently falls back to `client_credentials` and logs a warning telling you to re-run `digikey-mcp login`.
+
+To clear the stored tokens: `digikey-mcp logout`.
 
 ## Development
 
