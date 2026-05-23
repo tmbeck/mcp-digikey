@@ -1,6 +1,6 @@
 [project]
 name = "digikey-mcp"
-version = "0.2.0"
+version = "0.3.0"
 description = "Model Context Protocol server for DigiKey's Product Search v4 API"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -42,6 +42,25 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/digikey_mcp"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/",
+    "tests/",
+    "README.md",
+    "CHANGELOG.md",
+    "pyproject.toml",
+    ".env.example",
+    ".mcp.json.example",
+]
+# Keep dev-only material out of the published source distribution.
+exclude = [
+    "useful_llm_context/",
+    ".claude/",
+    "CLAUDE.md",
+    "dist/",
+    "uv.lock",
+]
 
 [tool.ruff]
 line-length = 100
