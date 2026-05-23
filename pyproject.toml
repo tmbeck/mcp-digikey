@@ -18,8 +18,8 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-    "fastmcp>=2.0",
-    "requests>=2.31",
+    "fastmcp>=2.14,<3",
+    "requests>=2.32",
     "python-dotenv>=1.0",
 ]
 
@@ -30,9 +30,34 @@ digikey-mcp = "digikey_mcp.server:main"
 Homepage = "https://github.com/tmbeck/mcp-digikey"
 Issues = "https://github.com/tmbeck/mcp-digikey/issues"
 
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/digikey_mcp"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

@@ -210,7 +210,9 @@ def keyword_search(
     if category_id:
         filter_options["CategoryFilter"] = [{"Id": str(category_id)}]
     if search_options:
-        filter_options["SearchOptions"] = [s.strip() for s in search_options.split(",") if s.strip()]
+        filter_options["SearchOptions"] = [
+            s.strip() for s in search_options.split(",") if s.strip()
+        ]
     if filter_options:
         body["FilterOptionsRequest"] = filter_options
 
@@ -266,7 +268,10 @@ def get_category_by_id(category_id: int) -> dict[str, Any]:
 
 
 @mcp.tool()
-def search_product_substitutions(product_number: str, includes: str | None = None) -> dict[str, Any]:
+def search_product_substitutions(
+    product_number: str,
+    includes: str | None = None,
+) -> dict[str, Any]:
     """Find substitute products for a given part.
 
     Per DigiKey's Product Search v4 swagger, this endpoint only accepts the
