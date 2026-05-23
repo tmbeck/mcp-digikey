@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.10"
 
 [[package]]
@@ -235,8 +235,8 @@ wheels = [
 
 [[package]]
 name = "digikey-mcp"
-version = "0.1.0"
-source = { virtual = "." }
+version = "0.2.0"
+source = { editable = "." }
 dependencies = [
     { name = "fastmcp" },
     { name = "python-dotenv" },
@@ -245,9 +245,9 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "fastmcp" },
-    { name = "python-dotenv" },
-    { name = "requests" },
+    { name = "fastmcp", specifier = ">=2.0" },
+    { name = "python-dotenv", specifier = ">=1.0" },
+    { name = "requests", specifier = ">=2.31" },
 ]
 
 [[package]]
