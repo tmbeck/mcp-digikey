@@ -1,5 +1,3 @@
-test_client.py
-
 # Environment variables
 .env
 .env.local
