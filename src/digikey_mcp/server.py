@@ -1,5 +1,6 @@
 """DigiKey Product Search v4 MCP server."""
 
+import argparse
 import logging
 import os
 import sys
@@ -550,7 +551,38 @@ def get_digi_reel_pricing(
     )
 
 
-def main() -> None:
+def _check_credentials() -> int:
+    """Verify CLIENT_ID/SECRET work by fetching a token + calling /manufacturers.
+
+    Returns the exit code (0 = OK, 1 = failure). Prints a one-line summary.
+    """
+    try:
+        client = _build_client_from_env()
+        client._token_value()  # force token fetch
+        result = client.request("GET", "/products/v4/search/manufacturers")
+    except Exception as exc:  # noqa: BLE001 — surfacing any failure is the point
+        print(f"FAIL: {exc}", file=sys.stderr)
+        return 1
+    count = len(result.get("Manufacturers", [])) if isinstance(result, dict) else 0
+    env = "SANDBOX" if client.api_base == SANDBOX_HOST else "PRODUCTION"
+    print(f"OK: {env} credentials valid; {count} manufacturers reachable.")
+    return 0
+
+
+def _build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="digikey-mcp",
+        description="MCP server for DigiKey's Product Search v4 API.",
+    )
+    parser.add_argument(
+        "--check-credentials",
+        action="store_true",
+        help="Verify CLIENT_ID/SECRET (via a one-shot OAuth + /manufacturers call) and exit.",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
     # MCP stdio transport reserves stdout for JSON-RPC; force all logging to stderr.
     logging.basicConfig(
         level=os.getenv("LOG_LEVEL", "INFO").upper(),
@@ -558,9 +590,13 @@ def main() -> None:
         stream=sys.stderr,
         force=True,
     )
+    args = _build_arg_parser().parse_args(argv)
+    if args.check_credentials:
+        return _check_credentials()
     logger.info("Starting DigiKey MCP server")
     mcp.run()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -125,6 +125,17 @@ def test_search_options_validator_handles_none_and_empty():
     assert _parse_search_options("  ,  ", KEYWORD_SEARCH_OPTIONS, "search_options") == []
 
 
+def test_arg_parser_recognizes_check_credentials():
+    from digikey_mcp.server import _build_arg_parser
+
+    parser = _build_arg_parser()
+    args = parser.parse_args(["--check-credentials"])
+    assert args.check_credentials is True
+
+    args = parser.parse_args([])
+    assert args.check_credentials is False
+
+
 def test_recommended_products_has_different_enum():
     from digikey_mcp.server import KEYWORD_SEARCH_OPTIONS, RECOMMENDED_PRODUCTS_OPTIONS
 
