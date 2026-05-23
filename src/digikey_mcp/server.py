@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 import threading
+import time
 from dataclasses import dataclass
 from typing import Annotated, Any
 
@@ -85,9 +86,14 @@ class DigiKeyClient:
         self._session = requests.Session()
         self._session.mount("https://", _build_retry_adapter())
         self._token: str | None = None
+        self._token_expires_at: float = 0.0
         self._token_lock = threading.Lock()
 
-    def _fetch_token(self) -> str:
+    # Refresh `_TOKEN_REFRESH_SKEW_SEC` seconds before expiry so we never hand
+    # out a token that expires mid-flight.
+    _TOKEN_REFRESH_SKEW_SEC = 60
+
+    def _fetch_token(self) -> None:
         env = "SANDBOX" if self.api_base == SANDBOX_HOST else "PRODUCTION"
         logger.info("Requesting OAuth token from %s (client_id=%s…)", env, self.client_id[:8])
         resp = self._session.post(
@@ -107,13 +113,27 @@ class DigiKeyClient:
                 f"DigiKey OAuth failed ({resp.status_code}): {detail}. "
                 "Check CLIENT_ID/CLIENT_SECRET and USE_SANDBOX."
             )
-        return resp.json()["access_token"]
+        payload = resp.json()
+        # DigiKey returns expires_in in seconds (typically ~600). Fall back to a
+        # conservative 5min if missing.
+        expires_in = int(payload.get("expires_in", 300))
+        self._token = payload["access_token"]
+        self._token_expires_at = time.monotonic() + expires_in - self._TOKEN_REFRESH_SKEW_SEC
+        logger.debug(
+            "Token cached for %ds (refresh skew %ds)",
+            expires_in,
+            self._TOKEN_REFRESH_SKEW_SEC,
+        )
 
     def _token_value(self, *, force_refresh: bool = False) -> str:
         with self._token_lock:
-            if self._token is None or force_refresh:
-                self._token = self._fetch_token()
-            return self._token
+            if (
+                force_refresh
+                or self._token is None
+                or time.monotonic() >= self._token_expires_at
+            ):
+                self._fetch_token()
+            return self._token  # type: ignore[return-value]
 
     def _headers(self, customer_id: str, *, force_refresh: bool = False) -> dict[str, str]:
         return {
