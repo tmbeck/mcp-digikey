@@ -90,7 +90,7 @@ endpoints, an HTTP transport mode, and dev tooling.
 ### Dev
 
 - Smoke test suite at `tests/test_smoke.py` (23 tests, no network).
-- Ruff config: `E/F/W/I/UP/B/SIM`, line-length 100, py310 target.
+- Ruff config: `E/F/W/I/UP/B/SIM`, line-length 100, py311 target.
 - `py.typed` marker (PEP 561).
 
 ## [0.2.0] - earlier

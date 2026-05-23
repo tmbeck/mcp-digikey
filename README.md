@@ -4,7 +4,7 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server that exposes 
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.11+
 - [`uv`](https://docs.astral.sh/uv/) (recommended) or `pip`
 - DigiKey API credentials (`CLIENT_ID` and `CLIENT_SECRET`) — register an app at https://developer.digikey.com/
 
