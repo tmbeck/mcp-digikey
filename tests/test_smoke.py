@@ -185,3 +185,99 @@ def test_recommended_products_has_different_enum():
     assert "LeadFree" not in KEYWORD_SEARCH_OPTIONS
     assert "RohsCompliant" in KEYWORD_SEARCH_OPTIONS
     assert "RoHSCompliant" in RECOMMENDED_PRODUCTS_OPTIONS
+
+
+# ---------- DigiKeyClient.request() lifecycle ----------
+
+
+class _FakeHTTPResp:
+    def __init__(self, status: int, body: dict | None = None, text: str = ""):
+        self.status_code = status
+        self._body = body or {}
+        self.text = text or str(body)
+
+    def json(self):
+        return self._body
+
+
+def _client_with_fixed_token(monkeypatch):
+    """Build a client that already has a valid cached token, no network."""
+    from digikey_mcp.server import DigiKeyClient
+
+    client = DigiKeyClient("cid", "secret")
+    client._token = "at-cached"
+    client._token_expires_at = float("inf")  # never expires for this test
+    return client
+
+
+def test_request_returns_json_on_200(monkeypatch):
+    client = _client_with_fixed_token(monkeypatch)
+
+    def fake_request(method, url, **kwargs):
+        assert method == "GET"
+        assert url.endswith("/manufacturers")
+        return _FakeHTTPResp(200, {"Manufacturers": [{"Id": 1}]})
+
+    monkeypatch.setattr(client._session, "request", fake_request)
+    result = client.request("GET", "/products/v4/search/manufacturers")
+    assert result == {"Manufacturers": [{"Id": 1}]}
+
+
+def test_request_retries_once_on_401_with_fresh_token(monkeypatch):
+    client = _client_with_fixed_token(monkeypatch)
+    calls: list[tuple[str, str]] = []
+
+    def fake_post(url, data, **kwargs):
+        # Token refresh on 401 — return a NEW token.
+        return _FakeHTTPResp(200, {"access_token": "at-refreshed", "expires_in": 600})
+
+    def fake_request(method, url, headers, **kwargs):
+        calls.append(("request", headers["Authorization"]))
+        # First call: 401 with stale token. Second call: 200 with new token.
+        if len(calls) == 1:
+            return _FakeHTTPResp(401, text="token expired")
+        return _FakeHTTPResp(200, {"ok": True})
+
+    monkeypatch.setattr(client._session, "post", fake_post)
+    monkeypatch.setattr(client._session, "request", fake_request)
+
+    result = client.request("GET", "/products/v4/search/manufacturers")
+    assert result == {"ok": True}
+    assert calls[0][1] == "Bearer at-cached"  # first try used stale token
+    assert calls[1][1] == "Bearer at-refreshed"  # retry used fresh token
+
+
+def test_request_raises_digikey_api_error_with_body(monkeypatch):
+    from digikey_mcp.server import DigiKeyAPIError
+
+    client = _client_with_fixed_token(monkeypatch)
+
+    def fake_request(method, url, **kwargs):
+        return _FakeHTTPResp(429, text='{"error": "rate limit exceeded"}')
+
+    monkeypatch.setattr(client._session, "request", fake_request)
+
+    with pytest.raises(DigiKeyAPIError) as excinfo:
+        client.request("GET", "/products/v4/search/manufacturers")
+    msg = str(excinfo.value)
+    assert "429" in msg
+    assert "rate limit" in msg
+
+
+def test_request_builds_expected_headers(monkeypatch):
+    client = _client_with_fixed_token(monkeypatch)
+    captured = {}
+
+    def fake_request(method, url, headers, **kwargs):
+        captured.update(headers)
+        return _FakeHTTPResp(200, {"ok": True})
+
+    monkeypatch.setattr(client._session, "request", fake_request)
+    client.request("GET", "/products/v4/search/manufacturers", customer_id="42")
+
+    assert captured["Authorization"] == "Bearer at-cached"
+    assert captured["X-DIGIKEY-Client-Id"] == "cid"
+    assert captured["X-DIGIKEY-Customer-Id"] == "42"
+    assert captured["X-DIGIKEY-Locale-Site"] == "US"
+    assert captured["X-DIGIKEY-Locale-Language"] == "en"
+    assert captured["X-DIGIKEY-Locale-Currency"] == "USD"
