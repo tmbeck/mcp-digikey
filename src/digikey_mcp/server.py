@@ -104,9 +104,21 @@ class DigiKeyClient:
     # out a token that expires mid-flight.
     _TOKEN_REFRESH_SKEW_SEC = 60
 
+    def _redact(self, text: str) -> str:
+        """Strip client_id / client_secret substrings before logging.
+
+        DigiKey *probably* doesn't echo secrets back in error bodies, but if
+        any future endpoint ever does (or our own request payload ends up in
+        a traceback) this prevents the secret from landing in logs.
+        """
+        for secret in (self.client_id, self.client_secret):
+            if secret and len(secret) >= 8:
+                text = text.replace(secret, "***")
+        return text
+
     def _fetch_token(self) -> None:
         env = "SANDBOX" if self.api_base == SANDBOX_HOST else "PRODUCTION"
-        logger.info("Requesting OAuth token from %s (client_id=%s…)", env, self.client_id[:8])
+        logger.info("Requesting OAuth token from %s", env)
         resp = self._session.post(
             self.token_url,
             data={
@@ -118,7 +130,7 @@ class DigiKeyClient:
             timeout=15,
         )
         if resp.status_code != 200:
-            detail = resp.text[:500] if resp.text else f"HTTP {resp.status_code}"
+            detail = self._redact(resp.text[:200]) if resp.text else f"HTTP {resp.status_code}"
             logger.error("OAuth error %s: %s", resp.status_code, detail)
             raise DigiKeyAPIError(
                 f"DigiKey OAuth failed ({resp.status_code}): {detail}. "
@@ -180,7 +192,7 @@ class DigiKeyClient:
                 logger.info("Got 401 on %s %s, refreshing token and retrying once", method, path)
                 continue
             if resp.status_code != 200:
-                detail = resp.text[:500] if resp.text else f"HTTP {resp.status_code}"
+                detail = self._redact(resp.text[:200]) if resp.text else f"HTTP {resp.status_code}"
                 logger.error("DigiKey %s %s -> %s: %s", method, path, resp.status_code, detail)
                 raise DigiKeyAPIError(
                     f"DigiKey API {resp.status_code} on {method} {path}: {detail}"
