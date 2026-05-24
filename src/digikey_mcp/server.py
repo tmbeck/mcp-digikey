@@ -88,12 +88,16 @@ class DigiKeyClient:
         *,
         use_sandbox: bool = False,
         locale: Locale | None = None,
+        api_timeout: float = 30.0,
+        oauth_timeout: float = 15.0,
     ) -> None:
         self.client_id = client_id
         self.client_secret = client_secret
         self.api_base = SANDBOX_HOST if use_sandbox else PROD_HOST
         self.token_url = f"{self.api_base}/v1/oauth2/token"
         self.locale = locale or Locale()
+        self.api_timeout = api_timeout
+        self.oauth_timeout = oauth_timeout
         self._session = requests.Session()
         self._session.mount("https://", _build_retry_adapter())
         self._token: str | None = None
@@ -127,7 +131,7 @@ class DigiKeyClient:
                 "client_secret": self.client_secret,
             },
             headers={"Content-Type": "application/x-www-form-urlencoded"},
-            timeout=15,
+            timeout=self.oauth_timeout,
         )
         if resp.status_code != 200:
             detail = self._redact(resp.text[:200]) if resp.text else f"HTTP {resp.status_code}"
@@ -186,7 +190,7 @@ class DigiKeyClient:
                 headers=self._headers(customer_id, force_refresh=attempt == 1),
                 params=params,
                 json=json,
-                timeout=30,
+                timeout=self.api_timeout,
             )
             if resp.status_code == 401 and attempt == 0:
                 logger.info("Got 401 on %s %s, refreshing token and retrying once", method, path)
@@ -220,6 +224,8 @@ def _build_client_from_env() -> DigiKeyClient:
         client_secret,
         use_sandbox=_env_bool("USE_SANDBOX", default=False),
         locale=locale,
+        api_timeout=float(os.getenv("DIGIKEY_TIMEOUT_SEC", "30")),
+        oauth_timeout=float(os.getenv("DIGIKEY_OAUTH_TIMEOUT_SEC", "15")),
     )
 
 
