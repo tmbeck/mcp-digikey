@@ -6,6 +6,7 @@ import os
 import sys
 import threading
 import time
+import urllib.parse
 from dataclasses import dataclass
 from typing import Annotated, Any
 
@@ -23,6 +24,15 @@ SANDBOX_HOST = "https://sandbox-api.digikey.com"
 
 _TRUE = {"1", "true", "yes", "y", "on"}
 _FALSE = {"0", "false", "no", "n", "off", ""}
+
+
+def _qp(value: Any) -> str:
+    """URL-encode a value for safe inclusion in a path segment.
+
+    Manufacturer part numbers can legitimately contain `/`, `?`, `#`, etc.
+    Stringify-then-percent-encode so user input never escapes its path segment.
+    """
+    return urllib.parse.quote(str(value), safe="")
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -335,7 +345,7 @@ def product_details(
     params = {"manufacturerId": manufacturer_id} if manufacturer_id else None
     return _get_client().request(
         "GET",
-        f"/products/v4/search/{product_number}/productdetails",
+        f"/products/v4/search/{_qp(product_number)}/productdetails",
         customer_id=customer_id,
         params=params,
     )
@@ -360,7 +370,7 @@ def get_category_by_id(category_id: int) -> dict[str, Any]:
     Args:
         category_id: The category ID to retrieve.
     """
-    return _get_client().request("GET", f"/products/v4/search/categories/{category_id}")
+    return _get_client().request("GET", f"/products/v4/search/categories/{_qp(category_id)}")
 
 
 @mcp.tool()
@@ -383,7 +393,7 @@ def search_product_substitutions(
     params = {"includes": includes} if includes else None
     return _get_client().request(
         "GET",
-        f"/products/v4/search/{product_number}/substitutions",
+        f"/products/v4/search/{_qp(product_number)}/substitutions",
         params=params,
     )
 
@@ -399,7 +409,7 @@ def get_alternate_packaging(product_number: str) -> dict[str, Any]:
     """
     return _get_client().request(
         "GET",
-        f"/products/v4/search/{product_number}/alternatepackaging",
+        f"/products/v4/search/{_qp(product_number)}/alternatepackaging",
     )
 
 
@@ -414,7 +424,7 @@ def get_product_associations(product_number: str) -> dict[str, Any]:
     """
     return _get_client().request(
         "GET",
-        f"/products/v4/search/{product_number}/associations",
+        f"/products/v4/search/{_qp(product_number)}/associations",
     )
 
 
@@ -444,7 +454,7 @@ def get_recommended_products(
         params["searchOptionList"] = ",".join(parsed_options)
     return _get_client().request(
         "GET",
-        f"/products/v4/search/{product_number}/recommendedproducts",
+        f"/products/v4/search/{_qp(product_number)}/recommendedproducts",
         params=params,
     )
 
@@ -456,7 +466,7 @@ def get_product_media(product_number: str) -> dict[str, Any]:
     Args:
         product_number: The product to get media for.
     """
-    return _get_client().request("GET", f"/products/v4/search/{product_number}/media")
+    return _get_client().request("GET", f"/products/v4/search/{_qp(product_number)}/media")
 
 
 @mcp.tool()
@@ -486,7 +496,7 @@ def get_product_pricing(
     """
     return _get_client().request(
         "GET",
-        f"/products/v4/search/{product_number}/pricing",
+        f"/products/v4/search/{_qp(product_number)}/pricing",
         customer_id=customer_id,
         params={
             "limit": limit,
@@ -524,7 +534,7 @@ def get_pricing_by_quantity(
     params = {"manufacturerId": manufacturer_id} if manufacturer_id else None
     return _get_client().request(
         "GET",
-        f"/products/v4/search/{product_number}/pricingbyquantity/{requested_quantity}",
+        f"/products/v4/search/{_qp(product_number)}/pricingbyquantity/{_qp(requested_quantity)}",
         customer_id=customer_id,
         params=params,
     )
@@ -545,7 +555,7 @@ def get_digi_reel_pricing(
     """
     return _get_client().request(
         "GET",
-        f"/products/v4/search/{product_number}/digireelpricing",
+        f"/products/v4/search/{_qp(product_number)}/digireelpricing",
         customer_id=customer_id,
         params={"requestedQuantity": requested_quantity},
     )

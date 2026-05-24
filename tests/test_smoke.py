@@ -88,6 +88,20 @@ def test_env_bool_rejects_garbage(monkeypatch):
         _env_bool("X_TEST_FLAG", default=False)
 
 
+def test_qp_quotes_path_special_chars():
+    from digikey_mcp.server import _qp
+
+    # Slash is the path separator — manufacturer PNs containing it must be encoded.
+    assert _qp("AB/CD") == "AB%2FCD"
+    # Query and fragment markers must not escape the segment.
+    assert _qp("foo?bar=baz") == "foo%3Fbar%3Dbaz"
+    assert _qp("foo#frag") == "foo%23frag"
+    # Path-traversal attempts get encoded too.
+    assert _qp("../admin") == "..%2Fadmin"
+    # Numbers stringify and pass through cleanly.
+    assert _qp(123) == "123"
+
+
 def test_retry_adapter_configured():
     from digikey_mcp.server import _build_retry_adapter
 
