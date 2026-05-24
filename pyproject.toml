@@ -18,8 +18,8 @@ classifiers = [
 ]
 dependencies = [
     "fastmcp>=2.14,<3",
-    "requests>=2.32",
-    "python-dotenv>=1.0",
+    "requests>=2.32,<3",
+    "python-dotenv>=1.0,<2",
 ]
 
 [project.scripts]
