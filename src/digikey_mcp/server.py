@@ -599,9 +599,16 @@ def _check_credentials() -> int:
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
+    from digikey_mcp import __version__
+
     parser = argparse.ArgumentParser(
         prog="digikey-mcp",
         description="MCP server for DigiKey's Product Search v4 API.",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"digikey-mcp {__version__}",
     )
     parser.add_argument(
         "--check-credentials",

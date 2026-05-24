@@ -139,6 +139,18 @@ def test_search_options_validator_handles_none_and_empty():
     assert _parse_search_options("  ,  ", KEYWORD_SEARCH_OPTIONS, "search_options") == []
 
 
+def test_arg_parser_version_flag(capsys):
+    from digikey_mcp import __version__
+    from digikey_mcp.server import _build_arg_parser
+
+    # argparse's action="version" prints then SystemExit(0)s.
+    with pytest.raises(SystemExit) as excinfo:
+        _build_arg_parser().parse_args(["--version"])
+    assert excinfo.value.code == 0
+    captured = capsys.readouterr()
+    assert __version__ in (captured.out + captured.err)
+
+
 def test_arg_parser_recognizes_check_credentials():
     from digikey_mcp.server import _build_arg_parser
 
