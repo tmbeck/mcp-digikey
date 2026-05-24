@@ -185,7 +185,8 @@ class DigiKeyClient:
                 raise DigiKeyAPIError(
                     f"DigiKey API {resp.status_code} on {method} {path}: {detail}"
                 )
-            return resp.json()
+            payload: dict[str, Any] = resp.json()
+            return payload
         raise RuntimeError("unreachable")
 
 
