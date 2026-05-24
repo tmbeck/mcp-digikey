@@ -160,7 +160,8 @@ class DigiKeyClient:
                 or time.monotonic() >= self._token_expires_at
             ):
                 self._fetch_token()
-            return self._token  # type: ignore[return-value]
+            assert self._token is not None, "_fetch_token must set _token or raise"
+            return self._token
 
     def _headers(self, customer_id: str, *, force_refresh: bool = False) -> dict[str, str]:
         return {
@@ -291,6 +292,21 @@ _SORT_FIELD_DOC = (
     "Price, Supplier, PriceManufacturerStandardPackage."
 )
 
+# Shared field annotations. DigiKey's PN format isn't formally bounded but real
+# part numbers are short; 250 matches keyword_search's keyword cap.
+ProductNumber = Annotated[
+    str,
+    Field(description="DigiKey or manufacturer part number.", min_length=1, max_length=250),
+]
+OptionalManufacturerId = Annotated[
+    str | None,
+    Field(description="Manufacturer ID (from `search_manufacturers`) for disambiguation."),
+]
+CustomerId = Annotated[
+    str,
+    Field(description="Customer ID for MyPricing / personalized data; '0' for anonymous."),
+]
+
 
 @mcp.tool()
 def keyword_search(
@@ -349,18 +365,11 @@ def keyword_search(
 
 @mcp.tool()
 def product_details(
-    product_number: str,
-    manufacturer_id: str | None = None,
-    customer_id: str = "0",
+    product_number: ProductNumber,
+    manufacturer_id: OptionalManufacturerId = None,
+    customer_id: CustomerId = "0",
 ) -> dict[str, Any]:
-    """Get detailed information for a specific product.
-
-    Args:
-        product_number: DigiKey or manufacturer part number.
-        manufacturer_id: Optional manufacturer ID for disambiguation when a
-            manufacturer part number matches multiple manufacturers.
-        customer_id: Customer ID for pricing (default "0").
-    """
+    """Get detailed information for a specific product."""
     params = {"manufacturerId": manufacturer_id} if manufacturer_id else None
     return _get_client().request(
         "GET",
@@ -383,31 +392,30 @@ def search_categories() -> dict[str, Any]:
 
 
 @mcp.tool()
-def get_category_by_id(category_id: int) -> dict[str, Any]:
-    """Get a specific category by its ID.
-
-    Args:
-        category_id: The category ID to retrieve.
-    """
+def get_category_by_id(
+    category_id: Annotated[
+        int,
+        Field(description="The category ID to retrieve.", ge=1),
+    ],
+) -> dict[str, Any]:
+    """Get a specific category by its ID."""
     return _get_client().request("GET", f"/products/v4/search/categories/{_qp(category_id)}")
 
 
 @mcp.tool()
 def search_product_substitutions(
-    product_number: str,
-    includes: str | None = None,
+    product_number: ProductNumber,
+    includes: Annotated[
+        str | None,
+        Field(description="Optional projection string (passed through as-is)."),
+    ] = None,
 ) -> dict[str, Any]:
     """Find substitute products for a given part.
 
     Per DigiKey's Product Search v4 swagger, this endpoint only accepts the
     product number (path) and an optional `includes` query param. Filtering by
     search options or excluding marketplace products must be done client-side
-    on the results.
-
-    Args:
-        product_number: The product to get substitutions for. Works best with a
-            DigiKey product number.
-        includes: Optional projection string (passed through as-is).
+    on the results. Works best with a DigiKey product number.
     """
     params = {"includes": includes} if includes else None
     return _get_client().request(
@@ -418,13 +426,10 @@ def search_product_substitutions(
 
 
 @mcp.tool()
-def get_alternate_packaging(product_number: str) -> dict[str, Any]:
+def get_alternate_packaging(product_number: ProductNumber) -> dict[str, Any]:
     """Get alternate packaging options for a product (e.g. tape-and-reel vs cut tape).
 
     Works best with a DigiKey product number.
-
-    Args:
-        product_number: The product to look up.
     """
     return _get_client().request(
         "GET",
@@ -433,13 +438,10 @@ def get_alternate_packaging(product_number: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-def get_product_associations(product_number: str) -> dict[str, Any]:
+def get_product_associations(product_number: ProductNumber) -> dict[str, Any]:
     """Get associated products for a part (eval boards, mating connectors, accessories).
 
     Works best with a DigiKey product number.
-
-    Args:
-        product_number: The product to look up.
     """
     return _get_client().request(
         "GET",
@@ -449,22 +451,27 @@ def get_product_associations(product_number: str) -> dict[str, Any]:
 
 @mcp.tool()
 def get_recommended_products(
-    product_number: str,
-    limit: int = 1,
-    search_options: str | None = None,
-    exclude_marketplace: bool = False,
+    product_number: ProductNumber,
+    limit: Annotated[
+        int,
+        Field(description="Max recommendations.", ge=1),
+    ] = 1,
+    search_options: Annotated[
+        str | None,
+        Field(
+            description=(
+                "Comma-delimited filters from a different enum than keyword_search: "
+                "LeadFree, CollapsePackingTypes, ExcludeNonStock, Has3DModel, "
+                "InStock, ManufacturerPartSearch, NewProductsOnly, RoHSCompliant."
+            ),
+        ),
+    ] = None,
+    exclude_marketplace: Annotated[
+        bool,
+        Field(description="Exclude marketplace products."),
+    ] = False,
 ) -> dict[str, Any]:
-    """Get recommended products (DigiKey's 'you might also like') for a part.
-
-    Args:
-        product_number: The product to look up.
-        limit: Max recommendations (default 1).
-        search_options: Comma-delimited filters from a different enum than
-            keyword_search: LeadFree, CollapsePackingTypes, ExcludeNonStock,
-            Has3DModel, InStock, ManufacturerPartSearch, NewProductsOnly,
-            RoHSCompliant.
-        exclude_marketplace: Exclude marketplace products.
-    """
+    """Get recommended products (DigiKey's 'you might also like') for a part."""
     parsed_options = _parse_search_options(
         search_options, RECOMMENDED_PRODUCTS_OPTIONS, "search_options"
     )
@@ -479,39 +486,41 @@ def get_recommended_products(
 
 
 @mcp.tool()
-def get_product_media(product_number: str) -> dict[str, Any]:
-    """Get media (images, datasheets, videos) for a product.
-
-    Args:
-        product_number: The product to get media for.
-    """
+def get_product_media(product_number: ProductNumber) -> dict[str, Any]:
+    """Get media (images, datasheets, videos) for a product."""
     return _get_client().request("GET", f"/products/v4/search/{_qp(product_number)}/media")
 
 
 @mcp.tool()
 def get_product_pricing(
-    product_number: str,
-    customer_id: str = "0",
-    limit: int = 5,
-    offset: int = 0,
-    in_stock: bool = False,
-    exclude_marketplace: bool = False,
-    exclude_tariff: bool = False,
+    product_number: ProductNumber,
+    customer_id: CustomerId = "0",
+    limit: Annotated[
+        int,
+        Field(description="Max products to return (DigiKey caps at 10).", ge=1, le=10),
+    ] = 5,
+    offset: Annotated[
+        int,
+        Field(description="Pagination offset.", ge=0),
+    ] = 0,
+    in_stock: Annotated[
+        bool,
+        Field(description="Only return in-stock products."),
+    ] = False,
+    exclude_marketplace: Annotated[
+        bool,
+        Field(description="Only return DigiKey-fulfilled products."),
+    ] = False,
+    exclude_tariff: Annotated[
+        bool,
+        Field(description="Exclude products subject to tariffs."),
+    ] = False,
 ) -> dict[str, Any]:
     """Get pricing information for products matching a product number.
 
-    Returns up to `limit` matched products (DigiKey caps this at 10) with
-    pricing tiers. MyPricing is included if the customer_id resolves to
-    a registered account.
-
-    Args:
-        product_number: Manufacturer or DigiKey part number; partial matches allowed.
-        customer_id: Customer ID for MyPricing (default "0").
-        limit: Max products to return, 1-10 (default 5).
-        offset: Pagination offset (default 0).
-        in_stock: Only return in-stock products.
-        exclude_marketplace: Only return DigiKey-fulfilled products.
-        exclude_tariff: Exclude products subject to tariffs.
+    Returns up to `limit` matched products with pricing tiers. MyPricing is
+    included if the customer_id resolves to a registered account. Partial
+    matches on `product_number` are allowed.
     """
     return _get_client().request(
         "GET",
@@ -529,10 +538,13 @@ def get_product_pricing(
 
 @mcp.tool()
 def get_pricing_by_quantity(
-    product_number: str,
-    requested_quantity: int,
-    manufacturer_id: str | None = None,
-    customer_id: str = "0",
+    product_number: ProductNumber,
+    requested_quantity: Annotated[
+        int,
+        Field(description="Quantity to price.", ge=1),
+    ],
+    manufacturer_id: OptionalManufacturerId = None,
+    customer_id: CustomerId = "0",
 ) -> dict[str, Any]:
     """Get pricing for a specific product at a specific quantity.
 
@@ -542,13 +554,6 @@ def get_pricing_by_quantity(
     - MaxOrderQuantity: rounded down to the part's max.
     - BetterValue: rounded up to a manufacturer standard package when
       the total is cheaper than the exact quantity.
-
-    Args:
-        product_number: Manufacturer or DigiKey part number.
-        requested_quantity: Quantity to price.
-        manufacturer_id: Disambiguates manufacturer part numbers that
-            map to multiple manufacturers.
-        customer_id: Customer ID for MyPricing (default "0").
     """
     params = {"manufacturerId": manufacturer_id} if manufacturer_id else None
     return _get_client().request(
@@ -561,17 +566,14 @@ def get_pricing_by_quantity(
 
 @mcp.tool()
 def get_digi_reel_pricing(
-    product_number: str,
-    requested_quantity: int,
-    customer_id: str = "0",
+    product_number: ProductNumber,
+    requested_quantity: Annotated[
+        int,
+        Field(description="Quantity for DigiReel pricing.", ge=1),
+    ],
+    customer_id: CustomerId = "0",
 ) -> dict[str, Any]:
-    """Get DigiReel pricing for a product.
-
-    Args:
-        product_number: DigiKey product number (must be DigiReel compatible).
-        requested_quantity: Quantity for DigiReel pricing.
-        customer_id: Customer ID for pricing (default "0").
-    """
+    """Get DigiReel pricing for a product. Product must be DigiReel compatible."""
     return _get_client().request(
         "GET",
         f"/products/v4/search/{_qp(product_number)}/digireelpricing",
@@ -581,13 +583,12 @@ def get_digi_reel_pricing(
 
 
 def _check_credentials() -> int:
-    """Verify CLIENT_ID/SECRET work by fetching a token + calling /manufacturers.
+    """Verify CLIENT_ID/SECRET work by calling /manufacturers (which forces a token fetch).
 
     Returns the exit code (0 = OK, 1 = failure). Prints a one-line summary.
     """
     try:
         client = _build_client_from_env()
-        client._token_value()  # force token fetch
         result = client.request("GET", "/products/v4/search/manufacturers")
     except Exception as exc:  # noqa: BLE001 — surfacing any failure is the point
         print(f"FAIL: {exc}", file=sys.stderr)
