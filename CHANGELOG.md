@@ -15,6 +15,14 @@ follows [Semantic Versioning](https://semver.org/) once it hits 1.0.
 
 - Dependencies refreshed (`uv lock --upgrade`); lower bounds bumped.
 
+### Security
+
+- `fastmcp` bumped from 2.14 to 3.x (`>=3.2,<4`), fixing PYSEC-2026-2475 /
+  PYSEC-2026-2476 and dropping the `diskcache` transitive dep
+  (PYSEC-2026-2447, no upstream fix). HTTP transport startup is now ~1s.
+- `urllib3` declared as a direct dependency (`>=2.8`); it was imported
+  but only pulled in transitively.
+
 ## [0.3.0] - 2026-05-23
 
 A substantial reshape of the original single-file server: bug fixes

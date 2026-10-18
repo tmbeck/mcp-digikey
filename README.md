@@ -124,7 +124,7 @@ digikey-mcp [--check-credentials] [--transport {stdio,http}]
 
 - `--check-credentials` — fetch an OAuth token + call `/search/manufacturers`, print PASS/FAIL, and exit. Use to debug `.mcp.json` / `claude_desktop_config.json` wiring without launching the server.
 - `--transport stdio` (default) — JSON-RPC over stdin/stdout; what MCP clients launch.
-- `--transport http` — streamable HTTP at `http://<host>:<port>/mcp/`. Heavier startup (~10-15s due to FastMCP's background worker init); useful for running as a persistent service.
+- `--transport http` — streamable HTTP at `http://<host>:<port>/mcp/`. Useful for running as a persistent service.
 - `--host` / `--port` — bind address for HTTP mode (defaults `127.0.0.1:8000`). Also `DIGIKEY_MCP_TRANSPORT` / `DIGIKEY_MCP_HOST` / `DIGIKEY_MCP_PORT` env vars.
 
 ## Development

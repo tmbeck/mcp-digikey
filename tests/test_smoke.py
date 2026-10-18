@@ -25,6 +25,10 @@ EXPECTED_TOOLS = {
 }
 
 
+def _tools(mcp):
+    return {t.name: t for t in asyncio.run(mcp.list_tools())}
+
+
 def test_package_imports():
     import digikey_mcp
     import digikey_mcp.server  # noqa: F401
@@ -35,14 +39,14 @@ def test_package_imports():
 def test_all_tools_register():
     from digikey_mcp.server import mcp
 
-    tools = asyncio.run(mcp.get_tools())
+    tools = _tools(mcp)
     assert set(tools) == EXPECTED_TOOLS
 
 
 def test_keyword_search_schema_carries_constraints():
     from digikey_mcp.server import mcp
 
-    tools = asyncio.run(mcp.get_tools())
+    tools = _tools(mcp)
     schema = tools["keyword_search"].parameters
     limit = schema["properties"]["limit"]
     assert limit["minimum"] == 1
@@ -53,7 +57,7 @@ def test_keyword_search_schema_carries_constraints():
 def test_get_product_pricing_schema_carries_constraints():
     from digikey_mcp.server import mcp
 
-    tools = asyncio.run(mcp.get_tools())
+    tools = _tools(mcp)
     props = tools["get_product_pricing"].parameters["properties"]
     assert props["limit"]["minimum"] == 1
     assert props["limit"]["maximum"] == 10
@@ -64,7 +68,7 @@ def test_get_product_pricing_schema_carries_constraints():
 def test_pricing_by_quantity_requires_positive_quantity():
     from digikey_mcp.server import mcp
 
-    tools = asyncio.run(mcp.get_tools())
+    tools = _tools(mcp)
     props = tools["get_pricing_by_quantity"].parameters["properties"]
     assert props["requested_quantity"]["minimum"] == 1
 
@@ -72,7 +76,7 @@ def test_pricing_by_quantity_requires_positive_quantity():
 def test_digi_reel_pricing_requires_positive_quantity():
     from digikey_mcp.server import mcp
 
-    tools = asyncio.run(mcp.get_tools())
+    tools = _tools(mcp)
     props = tools["get_digi_reel_pricing"].parameters["properties"]
     assert props["requested_quantity"]["minimum"] == 1
 
@@ -80,7 +84,7 @@ def test_digi_reel_pricing_requires_positive_quantity():
 def test_recommended_products_limit_positive():
     from digikey_mcp.server import mcp
 
-    tools = asyncio.run(mcp.get_tools())
+    tools = _tools(mcp)
     props = tools["get_recommended_products"].parameters["properties"]
     assert props["limit"]["minimum"] == 1
 
@@ -88,7 +92,7 @@ def test_recommended_products_limit_positive():
 def test_get_category_by_id_positive():
     from digikey_mcp.server import mcp
 
-    tools = asyncio.run(mcp.get_tools())
+    tools = _tools(mcp)
     props = tools["get_category_by_id"].parameters["properties"]
     assert props["category_id"]["minimum"] == 1
 
@@ -97,7 +101,7 @@ def test_product_number_bounded_across_tools():
     """Every tool that takes a product_number caps it at 250 chars."""
     from digikey_mcp.server import mcp
 
-    tools = asyncio.run(mcp.get_tools())
+    tools = _tools(mcp)
     for name, tool in tools.items():
         props = tool.parameters.get("properties", {})
         if "product_number" in props:

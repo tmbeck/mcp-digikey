@@ -15,9 +15,10 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-    "fastmcp>=2.14,<3",
+    "fastmcp>=3.2,<4",
     "requests>=2.34,<3",
     "python-dotenv>=1.2,<2",
+    "urllib3>=2.8,<3",  # imported directly (Retry); floor = security fixes
 ]
 
 [project.scripts]

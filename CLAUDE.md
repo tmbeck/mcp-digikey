@@ -41,7 +41,6 @@ uv add <package>                     # add a dependency
 - **HTTP errors are surfaced as `DigiKeyAPIError`** (with the truncated DigiKey response body included) rather than `requests.HTTPError`, so MCP clients see something useful.
 - **Two pricing endpoints with different shapes.** `get_product_pricing` -> `/search/{n}/pricing` is multi-match with `limit`/`offset`/filters; `get_pricing_by_quantity` -> `/search/{n}/pricingbyquantity/{qty}` is single-match with quantity in the path. Earlier code had a single `get_product_pricing` calling a nonexistent `/productpricing` URL — don't accidentally restore that pattern.
 - **Two `search_options` enums.** `keyword_search` and `get_recommended_products` accept the same parameter name with *different valid values* (see `KEYWORD_SEARCH_OPTIONS` vs `RECOMMENDED_PRODUCTS_OPTIONS` in `server.py`). `_parse_search_options()` validates per-endpoint; adding a new endpoint that takes search options needs its own enum constant.
-- **HTTP transport startup is slow** (~10-15s) because FastMCP spawns a docket worker. Stdio startup is instant. If you're benchmarking, this isn't our latency.
 - **Token refresh is proactive.** The client stores `_token_expires_at` (monotonic time) based on `expires_in` from DigiKey's response; `_token_value()` refreshes proactively. The 401-retry path in `request()` is a safety net for clock drift / unexpected revocation, not the primary refresh mechanism.
 
 ## Reference material
