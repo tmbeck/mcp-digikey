@@ -6,6 +6,8 @@ follows [Semantic Versioning](https://semver.org/) once it hits 1.0.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-17
+
 ### Breaking
 
 - **Requires Python 3.14+** (`requires-python = ">=3.14"`, `.python-version`
@@ -22,6 +24,12 @@ follows [Semantic Versioning](https://semver.org/) once it hits 1.0.
   (PYSEC-2026-2447, no upstream fix). HTTP transport startup is now ~1s.
 - `urllib3` declared as a direct dependency (`>=2.8`); it was imported
   but only pulled in transitively.
+
+### Fixed
+
+- Non-JSON or malformed 200 responses from the token and API endpoints now
+  raise `DigiKeyAPIError` instead of a bare `JSONDecodeError`/`KeyError`.
+- `customer_id` (sent as an HTTP header) is validated as digits only.
 
 ## [0.3.0] - 2026-05-23
 
