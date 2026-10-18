@@ -351,3 +351,26 @@ def test_request_builds_expected_headers(monkeypatch):
     assert captured["X-DIGIKEY-Locale-Site"] == "US"
     assert captured["X-DIGIKEY-Locale-Language"] == "en"
     assert captured["X-DIGIKEY-Locale-Currency"] == "USD"
+
+
+def test_request_wraps_non_json_body(monkeypatch):
+    from digikey_mcp.server import DigiKeyAPIError
+
+    client = _client_with_fixed_token(monkeypatch)
+
+    class _HTMLResp(_FakeHTTPResp):
+        def json(self):
+            raise ValueError("Expecting value")
+
+    monkeypatch.setattr(client._session, "request", lambda *a, **k: _HTMLResp(200, text="<html>"))
+    with pytest.raises(DigiKeyAPIError, match="non-JSON"):
+        client.request("GET", "/products/v4/search/manufacturers")
+
+
+def test_customer_id_must_be_numeric():
+    from digikey_mcp.server import mcp
+
+    for tool in _tools(mcp).values():
+        props = tool.parameters.get("properties", {})
+        if "customer_id" in props:
+            assert props["customer_id"]["pattern"] == r"^[0-9]{1,20}$", tool.name

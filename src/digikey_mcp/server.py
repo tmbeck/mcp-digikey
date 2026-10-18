@@ -140,11 +140,15 @@ class DigiKeyClient:
                 f"DigiKey OAuth failed ({resp.status_code}): {detail}. "
                 "Check CLIENT_ID/CLIENT_SECRET and USE_SANDBOX."
             )
-        payload = resp.json()
+        try:
+            payload = resp.json()
+            token = payload["access_token"]
+        except (ValueError, KeyError, TypeError) as exc:
+            raise DigiKeyAPIError("DigiKey OAuth returned an unexpected response body.") from exc
         # DigiKey returns expires_in in seconds (typically ~600). Fall back to a
         # conservative 5min if missing.
         expires_in = int(payload.get("expires_in", 300))
-        self._token = payload["access_token"]
+        self._token = token
         self._token_expires_at = time.monotonic() + expires_in - self._TOKEN_REFRESH_SKEW_SEC
         logger.debug(
             "Token cached for %ds (refresh skew %ds)",
@@ -202,7 +206,12 @@ class DigiKeyClient:
                 raise DigiKeyAPIError(
                     f"DigiKey API {resp.status_code} on {method} {path}: {detail}"
                 )
-            payload: dict[str, Any] = resp.json()
+            try:
+                payload: dict[str, Any] = resp.json()
+            except ValueError as exc:
+                raise DigiKeyAPIError(
+                    f"DigiKey API returned non-JSON body on {method} {path}"
+                ) from exc
             return payload
         raise RuntimeError("unreachable")
 
@@ -304,7 +313,10 @@ OptionalManufacturerId = Annotated[
 ]
 CustomerId = Annotated[
     str,
-    Field(description="Customer ID for MyPricing / personalized data; '0' for anonymous."),
+    Field(
+        description="Customer ID for MyPricing / personalized data; '0' for anonymous.",
+        pattern=r"^[0-9]{1,20}$",
+    ),
 ]
 
 
