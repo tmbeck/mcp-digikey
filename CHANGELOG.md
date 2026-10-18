@@ -4,6 +4,17 @@ All notable changes to this project. The format is loosely
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project
 follows [Semantic Versioning](https://semver.org/) once it hits 1.0.
 
+## [Unreleased]
+
+### Breaking
+
+- **Requires Python 3.14+** (`requires-python = ">=3.14"`, `.python-version`
+  pinned to 3.14; ruff/mypy target 3.14).
+
+### Changed
+
+- Dependencies refreshed (`uv lock --upgrade`); lower bounds bumped.
+
 ## [0.3.0] - 2026-05-23
 
 A substantial reshape of the original single-file server: bug fixes

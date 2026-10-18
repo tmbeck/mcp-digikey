@@ -3,7 +3,7 @@ name = "digikey-mcp"
 version = "0.3.1"
 description = "Model Context Protocol server for DigiKey's Product Search v4 API"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 license = { text = "MIT" }
 authors = [{ name = "Tim Beck" }]
 keywords = ["mcp", "digikey", "electronics", "fastmcp"]
@@ -12,14 +12,12 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
     "fastmcp>=2.14,<3",
-    "requests>=2.32,<3",
-    "python-dotenv>=1.0,<2",
+    "requests>=2.34,<3",
+    "python-dotenv>=1.2,<2",
 ]
 
 [project.scripts]
@@ -31,10 +29,10 @@ Issues = "https://github.com/tmbeck/mcp-digikey/issues"
 
 [dependency-groups]
 dev = [
-    "pytest>=8",
-    "ruff>=0.6",
-    "mypy>=1.10",
-    "types-requests>=2.32",
+    "pytest>=9",
+    "ruff>=0.17",
+    "mypy>=2",
+    "types-requests>=2.33",
 ]
 
 [build-system]
@@ -65,7 +63,7 @@ exclude = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = [
@@ -83,7 +81,7 @@ testpaths = ["tests"]
 addopts = "-q"
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.14"
 strict = true
 # FastMCP doesn't ship full type stubs yet; allow imports from it.
 [[tool.mypy.overrides]]
